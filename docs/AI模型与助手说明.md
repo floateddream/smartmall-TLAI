@@ -1,0 +1,173 @@
+# AI 模型与助手说明（阶段 5.1-5.2）
+
+## 1. 本阶段边界
+
+本阶段建立模型调用的最小完整链路：管理员维护对话和 Embedding 模型配置，分别选择活动模型，
+普通后台用户通过统一聊天接口调用对话模型，后续 RAG 流程通过 Embedding 模型生成检索向量。
+
+```text
+AssistantView
+  -> POST /api/ai/chat
+  -> AiChatService
+  -> AiChatGateway
+  -> SpringAiChatGateway
+  -> OpenAI Compatible API
+
+Embedding test
+  -> POST /api/admin/ai/models/{id}/test
+  -> AiModelConfigService
+  -> AiEmbeddingGateway
+  -> SpringAiEmbeddingGateway
+  -> POST {baseUrl}/embeddings
+```
+
+知识库检索、RAG、业务工具调用和对话持久化不在本阶段。系统提示词会明确限制模型，避免它声称已经查询订单或执行退款。
+
+## 2. 模块职责
+
+```text
+smartmall-ai
+  application/  模型配置与聊天用例
+  model/        AI 领域对象
+  repository/   模型配置持久化端口
+  gateway/      模型供应商调用端口和 Spring AI 实现
+
+smartmall-infrastructure
+  persistence/ai/  MyBatis 模型配置持久化实现
+
+smartmall-web
+  ai/  模型管理与聊天 HTTP 接口
+
+smartmall-application
+  V6__create_ai_model_config.sql
+  V7__add_ai_provider_credentials.sql
+  V8__add_embedding_model_support.sql
+```
+
+## 3. API Key 加密
+
+每个模型的 API Key 由管理员在模型配置页面录入。后端使用 AES-256-GCM 加密后保存到
+`ai_model_config.api_key_ciphertext`，查询接口只返回 `credentialConfigured`，不会返回明文或密文。
+
+后端仍需要一个主加密密钥。它只用于加解密供应商 API Key，不会发送给模型供应商。
+本地学习环境可以直接设置一段不少于 32 个 ASCII 字符的文本：
+
+```yaml
+smartmall:
+  ai:
+    master-key: "smartmall-tlai-ai-master-key-2026"
+    request-timeout: 60s
+```
+
+如果用于正式环境，建议在 PowerShell 中生成随机密钥：
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$masterKey = [Convert]::ToBase64String($bytes)
+$rng.Dispose()
+$masterKey
+```
+
+把文本或生成结果配置到被 Git 忽略的 `application-local.yml`，注意合并到已有的 `smartmall:` 节点：
+
+```yaml
+smartmall:
+  ai:
+    master-key: 上一步生成的Base64文本
+    request-timeout: 60s
+```
+
+生产环境使用环境变量：
+
+```text
+SMARTMALL_AI_MASTER_KEY
+SMARTMALL_AI_REQUEST_TIMEOUT
+```
+
+主密钥配置一次后不要随意更换，否则数据库中的旧 API Key 将无法解密。确需轮换时，应先实现密钥轮换流程，或在更换后由管理员重新录入每个模型的 API Key。
+
+## 4. 模型配置
+
+模型配置页面：
+
+```text
+http://127.0.0.1:5173/models
+```
+
+配置项：
+
+| 字段 | 示例 | 说明 |
+|---|---|---|
+| 配置名称 | DeepSeek Chat | 后台识别名称，必须唯一 |
+| 模型类型 | `CHAT` | 对话模型生成文本，`EMBEDDING` 模型生成检索向量 |
+| 供应商 | DeepSeek | 内置 OpenAI、DeepSeek、通义千问、Moonshot、智谱和自定义兼容接口 |
+| 接口地址 | `https://api.deepseek.com/v1` | 包含版本前缀，不包含 `/chat/completions` |
+| 模型名称 | `deepseek-chat` | 可从供应商预设中选择，也可手工输入模型 ID |
+| API Key | `sk-...` | 新增或切换供应商时必填；同供应商编辑时留空表示保留原密钥 |
+| 温度 | `0.7` | 取值 0 到 2 |
+| 最大输出 | `2048` | 取值 128 到 32768 |
+| 向量维度 | `1024` | 仅 Embedding 使用，必须与模型实际返回维度一致 |
+
+数据库使用按模型类型划分的部分唯一索引，保证 `CHAT` 和 `EMBEDDING` 各自最多只有一个活动模型。
+激活 Embedding 模型不会取消当前 DeepSeek 对话模型。激活操作还使用 PostgreSQL 事务级 advisory lock，
+避免并发切换产生冲突。没有 API Key 的历史远程模型会保留，但必须补录密钥后才能测试或激活。
+
+### Ollama bge-m3
+
+本地或自建 Ollama 使用 OpenAI 兼容的 Embedding 接口，不需要真实 API Key：
+
+| 字段 | 开发环境示例 |
+|---|---|
+| 模型类型 | `EMBEDDING` |
+| 供应商 | `Ollama` |
+| 接口地址 | `http://<服务器公网IP>:11434/v1` |
+| 模型名称 | `bge-m3` |
+| 向量维度 | `1024` |
+
+源码中的默认地址使用 `http://localhost:11434/v1`，不会硬编码具体服务器 IP。开发时在后台填写实际地址；
+后端部署进同一个 Docker 网络后，地址可改为 `http://ollama:11434/v1`。Ollama 的 OpenAI 兼容客户端仍要求
+Authorization 字段非空，后端会在内存中使用固定占位值 `ollama`，不会写入数据库。
+
+## 5. 接口与权限
+
+| 方法 | 地址 | 权限 | 用途 |
+|---|---|---|---|
+| `GET` | `/api/admin/ai/models/providers` | `system:model_manage` | 查询供应商和模型预设 |
+| `GET` | `/api/admin/ai/models` | `system:model_manage` | 查询模型配置 |
+| `POST` | `/api/admin/ai/models` | `system:model_manage` | 新增模型配置 |
+| `PUT` | `/api/admin/ai/models/{id}` | `system:model_manage` | 编辑模型配置 |
+| `PATCH` | `/api/admin/ai/models/{id}/active` | `system:model_manage` | 切换当前模型 |
+| `PATCH` | `/api/admin/ai/models/{id}/enabled` | `system:model_manage` | 启停模型配置 |
+| `POST` | `/api/admin/ai/models/{id}/test` | `system:model_manage` | 发起真实连通性测试 |
+| `POST` | `/api/ai/chat` | `ai:chat` | 发送对话消息 |
+
+V6 会把 `ai:chat` 授予内置 `ADMIN` 和 `OPERATOR`。前端最多发送最近 30 条消息，每条不超过 4000 个字符。
+
+## 6. 页面
+
+- `/models`：对话/向量模型选择、API Key 录入、配置编辑、分类激活和真实连通性测试。
+- `/assistant`：真实模型对话，展示模型名称和请求耗时。
+- `/knowledge`：仍为占位页，将在 RAG 阶段实现。
+
+当前对话仅保存在浏览器页面内，刷新页面后清空；后续阶段再增加服务端会话记录。
+
+## 7. 排错日志
+
+- 页面操作失败会显示 Element Plus 错误消息。
+- 浏览器按 `F12` 打开 Console，可以看到请求方法、接口地址、HTTP 状态、业务错误码和操作位置。
+- IDEA 后端控制台会记录模型新增、编辑、启停、激活、连通性测试及聊天的开始和结果。
+- 供应商调用失败会记录配置 ID、供应商、模型、接口地址、耗时和异常堆栈。
+- 日志不会打印 API Key、加密密文或完整对话内容。
+
+常见日志前缀：
+
+```text
+AI model connectivity test started
+AI provider call failed
+AI embedding call failed
+AI embedding connectivity test succeeded
+AI chat started
+Business request rejected
+```
