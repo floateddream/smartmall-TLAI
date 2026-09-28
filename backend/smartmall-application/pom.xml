@@ -4,6 +4,7 @@
     <parent><groupId>com.smartmall</groupId><artifactId>smartmall-tlai-backend</artifactId><version>0.0.1-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
     <artifactId>smartmall-application</artifactId>
     <dependencies>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-ai</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-business</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-web</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-security</artifactId><version>${project.version}</version></dependency>

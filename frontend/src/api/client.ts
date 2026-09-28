@@ -49,6 +49,14 @@ api.interceptors.response.use(
   (error: AxiosError<ApiResponse<unknown>>) => {
     const status = error.response?.status
     const body = error.response?.data
+    // 只记录请求位置和响应错误，不打印请求体，避免模型 API Key 等敏感字段进入控制台。
+    console.error('[API] 请求失败', {
+      method: error.config?.method?.toUpperCase(),
+      url: error.config?.url,
+      status,
+      code: body?.code || 'NETWORK_ERROR',
+      message: body?.message || error.message,
+    })
     // 登录接口本身的 401 应由表单显示，不触发全局退出。
     if (status === 401 && !error.config?.url?.endsWith('/login')) onUnauthorized?.()
     return Promise.reject(

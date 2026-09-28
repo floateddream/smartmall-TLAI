@@ -5,6 +5,7 @@
     <artifactId>smartmall-web</artifactId>
     <dependencies>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-common</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-ai</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-business</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-security</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>

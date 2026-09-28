@@ -24,7 +24,7 @@ const groups = computed(() => [
     { path: '/tickets', label: '售后工单', icon: Ticket, permission: 'ticket:view' },
   ] },
   { label: '智能工作台', items: [
-    { path: '/assistant', label: 'AI 助手', icon: BrainCircuit, permission: null },
+    { path: '/assistant', label: 'AI 助手', icon: BrainCircuit, permission: 'ai:chat' },
     { path: '/knowledge', label: '知识库', icon: Database, permission: null },
   ] },
   { label: '系统设置', items: [

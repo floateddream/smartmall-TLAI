@@ -67,7 +67,10 @@ class UserAccountServiceTest {
         UserAccount operator = user(3L, true, BuiltInRoleCodes.OPERATOR);
         UserAccount disabled = user(3L, false, BuiltInRoleCodes.OPERATOR);
         when(userRepository.findById(3L)).thenReturn(Optional.of(operator), Optional.of(disabled));
-        when(userRepository.updateEnabled(3L, false, org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        when(userRepository.updateEnabled(
+                org.mockito.ArgumentMatchers.eq(3L),
+                org.mockito.ArgumentMatchers.eq(false),
+                org.mockito.ArgumentMatchers.any())).thenReturn(true);
 
         UserAccount result = service.changeEnabled(3L,
                 new ChangeUserEnabledCommand(false, 1L, "admin"));

@@ -4,6 +4,7 @@
 
 ```text
 smartmall-common          统一响应、分页、业务异常和错误码
+smartmall-ai              对话/Embedding 模型配置、密钥加密和供应商网关
 smartmall-business        用户、商品、客户、订单、退款、工单领域对象、业务服务、Repository 接口
 smartmall-infrastructure  MyBatis 实体、Mapper、Repository 实现；后续 Redis/消息实现也放这里
 smartmall-security        Spring Security、JWT、登录和注册用例
@@ -15,10 +16,11 @@ smartmall-application     唯一启动入口、配置、Flyway 和启动初始�
 依赖只允许由外向内：
 
 ```text
-application -> web / security / infrastructure / job
-web         -> security / business / common
+application -> ai / business / web / security / infrastructure / job
+web         -> ai / security / business / common
+infrastructure -> ai / business / common
 security    -> business / common
-infrastructure -> business / common
+ai          -> common
 business    -> common
 ```
 
@@ -28,7 +30,7 @@ business    -> common
 smartmall-application/src/main/java/com/smartmall/tlai/SmartMallTlaiApplication.java
 ```
 
-IDEA 重新加载 `backend/pom.xml` 后，应看到 7 个 Maven 子模块。启动配置的模块 classpath 要选择 `smartmall-application`。本地私密配置放在：
+IDEA 重新加载 `backend/pom.xml` 后，应看到 8 个 Maven 子模块。启动配置的模块 classpath 要选择 `smartmall-application`。本地私密配置放在：
 
 ```text
 smartmall-application/src/main/resources/application-local.yml

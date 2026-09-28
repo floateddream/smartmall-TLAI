@@ -27,6 +27,10 @@ management:
         include: health,info
 
 smartmall:
+  ai:
+    # 供应商 API Key 在后台录入并加密入库；主密钥只由服务器持有，不能提交到 Git。
+    master-key: ${SMARTMALL_AI_MASTER_KEY:}
+    request-timeout: ${SMARTMALL_AI_REQUEST_TIMEOUT:60s}
   security:
     jwt:
       secret: ${SMARTMALL_JWT_SECRET}

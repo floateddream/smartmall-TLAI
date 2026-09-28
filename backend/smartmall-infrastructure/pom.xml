@@ -5,6 +5,7 @@
     <artifactId>smartmall-infrastructure</artifactId>
     <dependencies>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-common</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-ai</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-business</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.baomidou</groupId><artifactId>mybatis-plus-spring-boot3-starter</artifactId></dependency>
     </dependencies>
