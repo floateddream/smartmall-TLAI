@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: smartmall-tlai-backend
+  datasource:
+    url: ${SMARTMALL_DB_URL:jdbc:postgresql://127.0.0.1:5432/smartmall}
+    username: ${SMARTMALL_DB_USERNAME:smartmall}
+    password: ${SMARTMALL_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  flyway:
+    enabled: true
+    validate-on-migrate: true
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+smartmall:
+  security:
+    jwt:
+      secret: ${SMARTMALL_JWT_SECRET}
+      access-token-ttl: 2h
+    cors:
+      allowed-origins: ${SMARTMALL_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  bootstrap-admin:
+    enabled: ${SMARTMALL_BOOTSTRAP_ADMIN_ENABLED:false}
+    username: ${SMARTMALL_BOOTSTRAP_ADMIN_USERNAME:admin}
+    email: ${SMARTMALL_BOOTSTRAP_ADMIN_EMAIL:admin@smartmall.local}
+    password: ${SMARTMALL_BOOTSTRAP_ADMIN_PASSWORD:}

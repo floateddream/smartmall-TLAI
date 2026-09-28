@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: smartmall-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartmall}
+      POSTGRES_USER: ${POSTGRES_USER:-smartmall}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:5432:5432"
+    volumes:
+      - smartmall-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartmall} -d ${POSTGRES_DB:-smartmall}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    shm_size: 256m
+    mem_limit: 1g
+    cpus: 1.0
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartmall-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:6379:6379"
+    volumes:
+      - smartmall-redis-data:/data
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD" --maxmemory 192mb --maxmemory-policy noeviction
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  smartmall-postgres-data:
+  smartmall-redis-data:

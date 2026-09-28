@@ -1,0 +1,25 @@
+CREATE TABLE product (
+    id BIGSERIAL PRIMARY KEY,
+    sku VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(120) NOT NULL,
+    description VARCHAR(1000),
+    price NUMERIC(12, 2) NOT NULL CHECK (price > 0),
+    stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_product_created_at ON product (created_at DESC);
+
+-- 客户是订单中的业务对象，不是可以登录后台的 app_user。
+CREATE TABLE customer (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(32),
+    email VARCHAR(128),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_customer_created_at ON customer (created_at DESC);

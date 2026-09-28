@@ -1,0 +1,24 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Java / Maven
+**/target/
+*.log
+
+# Node
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+**/application-local.yml
+**/application-local.yaml
+
+# Operating systems
+.DS_Store
+Thumbs.db
