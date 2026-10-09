@@ -11,6 +11,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -56,6 +57,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException exception) {
         return ResponseEntity.status(ErrorCode.FORBIDDEN.status())
                 .body(ApiResponse.failure(ErrorCode.FORBIDDEN));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException exception) {
+        return ResponseEntity.status(ErrorCode.KNOWLEDGE_FILE_TOO_LARGE.status())
+                .body(ApiResponse.failure(ErrorCode.KNOWLEDGE_FILE_TOO_LARGE));
     }
 
     @ExceptionHandler(Exception.class)

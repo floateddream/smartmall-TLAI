@@ -51,6 +51,15 @@ public class MybatisOrderRepository implements OrderRepository {
     }
 
     @Override
+    public Optional<Order> findByOrderNo(String orderNo) {
+        OrderPersistenceEntity entity = orderMapper.selectOne(
+                Wrappers.<OrderPersistenceEntity>lambdaQuery()
+                        .eq(OrderPersistenceEntity::getOrderNo, orderNo)
+                        .last("LIMIT 1"));
+        return entity == null ? Optional.empty() : findById(entity.getId());
+    }
+
+    @Override
     public Order insert(Order order) {
         OrderPersistenceEntity entity = toEntity(order);
         orderMapper.insert(entity);

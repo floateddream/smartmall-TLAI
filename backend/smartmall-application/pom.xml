@@ -5,7 +5,11 @@
     <artifactId>smartmall-application</artifactId>
     <dependencies>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-ai</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-knowledge</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-rag</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-business</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-analytics</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-agent</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-web</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-security</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-infrastructure</artifactId><version>${project.version}</version></dependency>

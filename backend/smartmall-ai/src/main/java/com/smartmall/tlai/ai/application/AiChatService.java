@@ -44,17 +44,46 @@ public class AiChatService {
 
     @Transactional(readOnly = true)
     public AiChatResult chat(List<AiChatMessage> requestedMessages) {
+        return complete(validateMessages(requestedMessages), SYSTEM_PROMPT);
+    }
+
+    /** 供 RAG 等内部用例追加可信系统上下文，普通用户消息不能直接控制该内容。 */
+    @Transactional(readOnly = true)
+    public AiChatResult chatWithContext(List<AiChatMessage> requestedMessages, String systemContext) {
         List<AiChatMessage> messages = validateMessages(requestedMessages);
+        return complete(messages, buildSystemPrompt(systemContext));
+    }
+
+    /** 供 BI 等内部编排使用固定系统提示词，提示词不从 HTTP 请求直接接收。 */
+    @Transactional(readOnly = true)
+    public AiChatResult chatWithSystemPrompt(List<AiChatMessage> requestedMessages, String systemPrompt) {
+        if (systemPrompt == null || systemPrompt.isBlank() || systemPrompt.length() > 20_000) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "AI 系统提示词不能为空且不能超过 20000 个字符");
+        }
+        return complete(validateMessages(requestedMessages), systemPrompt.trim());
+    }
+
+    private AiChatResult complete(List<AiChatMessage> messages, String systemPrompt) {
         AiModelConfig config = repository.findActive(AiModelType.CHAT)
                 .filter(AiModelConfig::enabled)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AI_MODEL_NOT_CONFIGURED));
         log.info("AI chat started: configId={}, provider={}, model={}, messageCount={}",
                 config.id(), config.provider(), config.modelName(), messages.size());
-        AiChatResult result = gateway.complete(config, messages, SYSTEM_PROMPT,
-                credentialCipher.decrypt(config.apiKeyCiphertext()), properties.requestTimeout());
+        String apiKey = config.credentialRequired()
+                ? credentialCipher.decrypt(config.apiKeyCiphertext()) : "ollama";
+        AiChatResult result = gateway.complete(config, messages, systemPrompt,
+                apiKey, properties.requestTimeout());
         log.info("AI chat succeeded: configId={}, model={}, latencyMs={}",
                 config.id(), result.modelName(), result.latencyMs());
         return result;
+    }
+
+    private static String buildSystemPrompt(String systemContext) {
+        if (systemContext == null || systemContext.isBlank()) return SYSTEM_PROMPT;
+        if (systemContext.length() > 16_000) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "AI 系统上下文不能超过 16000 个字符");
+        }
+        return SYSTEM_PROMPT + "\n\n" + systemContext.trim();
     }
 
     private static List<AiChatMessage> validateMessages(List<AiChatMessage> requestedMessages) {

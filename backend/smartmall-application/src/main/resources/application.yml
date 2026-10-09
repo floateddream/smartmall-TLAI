@@ -13,6 +13,16 @@ spring:
     validate-on-migrate: true
   jackson:
     default-property-inclusion: non_null
+  data:
+    redis:
+      host: ${SMARTMALL_REDIS_HOST:127.0.0.1}
+      port: ${SMARTMALL_REDIS_PORT:6379}
+      password: ${SMARTMALL_REDIS_PASSWORD:}
+      timeout: ${SMARTMALL_REDIS_TIMEOUT:2s}
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
 
 mybatis-plus:
   configuration:
@@ -27,10 +37,26 @@ management:
         include: health,info
 
 smartmall:
+  analytics:
+    cache-ttl: ${SMARTMALL_ANALYTICS_CACHE_TTL:5m}
   ai:
     # 供应商 API Key 在后台录入并加密入库；主密钥只由服务器持有，不能提交到 Git。
     master-key: ${SMARTMALL_AI_MASTER_KEY:}
     request-timeout: ${SMARTMALL_AI_REQUEST_TIMEOUT:60s}
+  storage:
+    minio:
+      endpoint: ${SMARTMALL_MINIO_ENDPOINT:http://127.0.0.1:9000}
+      access-key: ${SMARTMALL_MINIO_ACCESS_KEY:}
+      secret-key: ${SMARTMALL_MINIO_SECRET_KEY:}
+      bucket: ${SMARTMALL_MINIO_BUCKET:smartmall-documents}
+  knowledge:
+    processing:
+      initial-delay: ${SMARTMALL_KNOWLEDGE_INITIAL_DELAY:5000}
+      poll-interval: ${SMARTMALL_KNOWLEDGE_POLL_INTERVAL:3000}
+  rag:
+    top-k: ${SMARTMALL_RAG_TOP_K:5}
+    min-score: ${SMARTMALL_RAG_MIN_SCORE:0.35}
+    max-context-characters: ${SMARTMALL_RAG_MAX_CONTEXT_CHARACTERS:10000}
   security:
     jwt:
       secret: ${SMARTMALL_JWT_SECRET}

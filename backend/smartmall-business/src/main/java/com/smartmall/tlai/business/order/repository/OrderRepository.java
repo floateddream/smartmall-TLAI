@@ -12,6 +12,7 @@ public interface OrderRepository {
     long count(String keyword, OrderStatus status);
     List<Order> findPage(int page, int size, String keyword, OrderStatus status);
     Optional<Order> findById(long id);
+    Optional<Order> findByOrderNo(String orderNo);
     Order insert(Order order);
     boolean markPaid(long id, OffsetDateTime changedAt);
     boolean markCancelled(long id, OffsetDateTime changedAt);

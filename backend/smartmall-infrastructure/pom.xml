@@ -6,7 +6,14 @@
     <dependencies>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-common</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-ai</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-knowledge</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-business</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-analytics</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-agent</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>com.baomidou</groupId><artifactId>mybatis-plus-spring-boot3-starter</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
+        <dependency><groupId>io.minio</groupId><artifactId>minio</artifactId></dependency>
+        <dependency><groupId>org.apache.tika</groupId><artifactId>tika-core</artifactId></dependency>
+        <dependency><groupId>org.apache.tika</groupId><artifactId>tika-parsers-standard-package</artifactId></dependency>
     </dependencies>
 </project>

@@ -1,27 +1,31 @@
-# AI 模型与助手说明（阶段 5.1-5.2）
+# AI 模型、助手与 RAG 说明（阶段 5.1-5.4）
 
 ## 1. 本阶段边界
 
 本阶段建立模型调用的最小完整链路：管理员维护对话和 Embedding 模型配置，分别选择活动模型，
-普通后台用户通过统一聊天接口调用对话模型，后续 RAG 流程通过 Embedding 模型生成检索向量。
+普通后台用户通过统一聊天接口调用对话模型，知识库处理任务通过 Embedding 模型生成文档检索向量。
 
 ```text
 AssistantView
   -> POST /api/ai/chat
-  -> AiChatService
+  -> 普通模式：AiChatService
+  -> 知识库增强：RagChatService
+       -> KnowledgeSearchService
+       -> bge-m3 生成问题向量
+       -> pgvector 余弦相似度检索
+       -> AiChatService 注入资料并生成引用式回答
   -> AiChatGateway
   -> SpringAiChatGateway
   -> OpenAI Compatible API
 
-Embedding test
-  -> POST /api/admin/ai/models/{id}/test
-  -> AiModelConfigService
+Embedding test / knowledge indexing
+  -> AiModelConfigService / AiEmbeddingService
   -> AiEmbeddingGateway
   -> SpringAiEmbeddingGateway
   -> POST {baseUrl}/embeddings
 ```
 
-知识库检索、RAG、业务工具调用和对话持久化不在本阶段。系统提示词会明确限制模型，避免它声称已经查询订单或执行退款。
+文档上传后会使用活动的 Embedding 模型生成向量并写入 `knowledge_chunk`。AI 助手开启“知识库增强”后，会把用户问题也转换为向量，检索最相似的文档片段，再由对话模型基于片段生成带来源的回答。业务工具调用和对话持久化仍未实现。
 
 ## 2. 模块职责
 
@@ -34,6 +38,12 @@ smartmall-ai
 
 smartmall-infrastructure
   persistence/ai/  MyBatis 模型配置持久化实现
+
+smartmall-knowledge
+  问题向量化和 pgvector 相似度检索
+
+smartmall-rag
+  检索上下文组装、来源编号和引用式回答编排
 
 smartmall-web
   ai/  模型管理与聊天 HTTP 接口
@@ -141,15 +151,15 @@ Authorization 字段非空，后端会在内存中使用固定占位值 `ollama`
 | `PATCH` | `/api/admin/ai/models/{id}/active` | `system:model_manage` | 切换当前模型 |
 | `PATCH` | `/api/admin/ai/models/{id}/enabled` | `system:model_manage` | 启停模型配置 |
 | `POST` | `/api/admin/ai/models/{id}/test` | `system:model_manage` | 发起真实连通性测试 |
-| `POST` | `/api/ai/chat` | `ai:chat` | 发送对话消息 |
+| `POST` | `/api/ai/chat` | `ai:chat`；增强模式另需 `knowledge:view` | 普通对话或知识库增强对话 |
 
 V6 会把 `ai:chat` 授予内置 `ADMIN` 和 `OPERATOR`。前端最多发送最近 30 条消息，每条不超过 4000 个字符。
 
 ## 6. 页面
 
 - `/models`：对话/向量模型选择、API Key 录入、配置编辑、分类激活和真实连通性测试。
-- `/assistant`：真实模型对话，展示模型名称和请求耗时。
-- `/knowledge`：仍为占位页，将在 RAG 阶段实现。
+- `/assistant`：可切换普通对话与知识库增强模式；增强回答展示文档、片段编号和相似度。
+- `/knowledge`：MinIO 文档管理、解析、分段、向量化和处理状态。
 
 当前对话仅保存在浏览器页面内，刷新页面后清空；后续阶段再增加服务端会话记录。
 
@@ -169,5 +179,7 @@ AI provider call failed
 AI embedding call failed
 AI embedding connectivity test succeeded
 AI chat started
+Knowledge search completed
+RAG chat succeeded
 Business request rejected
 ```

@@ -53,9 +53,71 @@ export interface AiChatReply {
   content: string
   modelName: string
   latencyMs: number
+  sources: AiChatSource[]
+  tools: AiAgentTool[]
+  pendingAction: AiPendingAction | null
+  suggestions: AiSuggestion[]
+  responseType: AiResponseType
+  missingFields: string[]
+}
+
+export type AiResponseType = 'ANSWER' | 'TOOL_RESULT' | 'ACTION_CONFIRMATION' | 'CLARIFICATION' | 'UNSUPPORTED' | 'SYSTEM_ERROR'
+
+export type AiCapabilityType = 'DIRECT' | 'READ_ONLY' | 'CONFIRM_REQUIRED'
+export type AiCapabilityCategory = 'GENERAL' | 'KNOWLEDGE' | 'BUSINESS' | 'ANALYTICS'
+
+export interface AiCapability {
+  code: string
+  displayName: string
+  description: string
+  category: AiCapabilityCategory
+  type: AiCapabilityType
+  examples: string[]
+}
+
+export interface AiSuggestion {
+  label: string
+  prompt: string
+  capabilityCode: string
+}
+
+export interface AiAgentTool {
+  toolName: string
+  displayName: string
+  summary: string
+  latencyMs: number
+}
+
+export interface AiPendingAction {
+  token: string
+  actionName: string
+  displayName: string
+  summary: string
+  expiresAt: string
+}
+
+export type AiAgentActionStatus = 'PENDING' | 'EXECUTING' | 'SUCCEEDED' | 'CANCELLED' | 'EXPIRED'
+
+export interface AiAgentActionResult {
+  actionName: string
+  displayName: string
+  summary: string
+  status: AiAgentActionStatus
+  latencyMs: number
+}
+
+export interface AiChatSource {
+  reference: number
+  documentId: number
+  documentName: string
+  chunkIndex: number
+  excerpt: string
+  score: number
 }
 
 export const aiApi = {
+  listCapabilities: async () =>
+    (await api.get<ApiResponse<AiCapability[]>>('/ai/capabilities')).data.data,
   listProviders: async () =>
     (await api.get<ApiResponse<AiProviderOption[]>>('/admin/ai/models/providers')).data.data,
   listModels: async () =>
@@ -70,6 +132,14 @@ export const aiApi = {
     (await api.patch<ApiResponse<AiModelConfig>>(`/admin/ai/models/${id}/enabled`, { enabled })).data.data,
   testModel: async (id: number) =>
     (await api.post<ApiResponse<{ success: boolean; reply: string }>>(`/admin/ai/models/${id}/test`, undefined, { timeout: 130000 })).data.data,
-  chat: async (messages: AiChatMessage[]) =>
-    (await api.post<ApiResponse<AiChatReply>>('/ai/chat', { messages }, { timeout: 70000 })).data.data,
+  chat: async (messages: AiChatMessage[], knowledgeEnabled = false, agentEnabled = false) =>
+    (await api.post<ApiResponse<AiChatReply>>('/ai/chat', {
+      messages,
+      knowledgeEnabled,
+      agentEnabled,
+    }, { timeout: 130000 })).data.data,
+  confirmAgentAction: async (token: string) =>
+    (await api.post<ApiResponse<AiAgentActionResult>>('/ai/agent/confirm', { token }, { timeout: 130000 })).data.data,
+  cancelAgentAction: async (token: string) =>
+    (await api.post<ApiResponse<AiAgentActionResult>>('/ai/agent/cancel', { token })).data.data,
 }

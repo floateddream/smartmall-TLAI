@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Boxes, BrainCircuit, ChevronDown, ChevronRight,
+  BarChart3, Boxes, BrainCircuit, ChevronDown, ChevronRight,
   Database, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   RotateCcw, Settings2, ShieldCheck, ShoppingBag, Ticket, UserRound, UsersRound,
 } from 'lucide-vue-next'
@@ -25,7 +25,8 @@ const groups = computed(() => [
   ] },
   { label: '智能工作台', items: [
     { path: '/assistant', label: 'AI 助手', icon: BrainCircuit, permission: 'ai:chat' },
-    { path: '/knowledge', label: '知识库', icon: Database, permission: null },
+    { path: '/knowledge', label: '知识库', icon: Database, permission: 'knowledge:view' },
+    { path: '/data-analysis', label: '数据分析', icon: BarChart3, permission: 'analytics:view' },
   ] },
   { label: '系统设置', items: [
     { path: '/access-control', label: '用户与权限', icon: ShieldCheck, permission: 'system:user_view' },

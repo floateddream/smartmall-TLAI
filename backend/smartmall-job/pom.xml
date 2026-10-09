@@ -5,6 +5,7 @@
     <artifactId>smartmall-job</artifactId>
     <dependencies>
         <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-business</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>com.smartmall</groupId><artifactId>smartmall-knowledge</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.springframework</groupId><artifactId>spring-context</artifactId></dependency>
     </dependencies>
 </project>

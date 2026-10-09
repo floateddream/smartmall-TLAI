@@ -55,6 +55,16 @@ public class OrderService {
         return requireOrder(id);
     }
 
+    @Transactional(readOnly = true)
+    public Order getByOrderNo(String orderNo) {
+        String normalized = orderNo == null ? "" : orderNo.trim().toUpperCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
+        }
+        return orderRepository.findByOrderNo(normalized)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+    }
+
     @Transactional
     public Order create(CreateOrderCommand command) {
         Customer customer = customerRepository.findById(command.customerId())

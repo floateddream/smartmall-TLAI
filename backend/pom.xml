@@ -18,7 +18,11 @@
     <modules>
         <module>smartmall-common</module>
         <module>smartmall-ai</module>
+        <module>smartmall-knowledge</module>
+        <module>smartmall-rag</module>
         <module>smartmall-business</module>
+        <module>smartmall-analytics</module>
+        <module>smartmall-agent</module>
         <module>smartmall-infrastructure</module>
         <module>smartmall-security</module>
         <module>smartmall-web</module>
@@ -31,6 +35,8 @@
         <mybatis-plus.version>3.5.12</mybatis-plus.version>
         <jjwt.version>0.12.6</jjwt.version>
         <spring-ai.version>1.1.8</spring-ai.version>
+        <minio.version>8.5.17</minio.version>
+        <tika.version>3.2.3</tika.version>
     </properties>
 
     <dependencyManagement>
@@ -61,6 +67,21 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-jackson</artifactId>
                 <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parsers-standard-package</artifactId>
+                <version>${tika.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
