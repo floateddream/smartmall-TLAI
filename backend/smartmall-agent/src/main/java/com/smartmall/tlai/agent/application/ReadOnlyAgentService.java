@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartmall.tlai.agent.model.AgentChatResult;
 import com.smartmall.tlai.agent.model.AgentCapability;
 import com.smartmall.tlai.agent.model.AgentCapabilityType;
+import com.smartmall.tlai.agent.model.AgentConversationState;
 import com.smartmall.tlai.agent.model.AgentResponseType;
 import com.smartmall.tlai.agent.model.AgentSuggestion;
 import com.smartmall.tlai.agent.model.AgentToolExecution;
@@ -13,6 +14,7 @@ import com.smartmall.tlai.agent.model.AgentUserContext;
 import com.smartmall.tlai.ai.application.AiChatService;
 import com.smartmall.tlai.ai.model.AiChatMessage;
 import com.smartmall.tlai.ai.model.AiChatResult;
+import com.smartmall.tlai.ai.model.AiCallContext;
 import com.smartmall.tlai.analytics.application.AnalyticsQueryService;
 import com.smartmall.tlai.analytics.model.AnalyticsDimension;
 import com.smartmall.tlai.analytics.model.AnalyticsGranularity;
@@ -46,6 +48,8 @@ public class ReadOnlyAgentService {
     private static final Set<String> CREATE_TICKET_FIELDS = Set.of(
             "orderNo", "category", "priority", "subject", "description");
     private static final Set<String> REPLY_TICKET_FIELDS = Set.of("ticketId", "content");
+    private static final Set<String> CREATE_TICKET_ARGUMENT_FIELDS = Set.of(
+            "orderId", "orderNo", "category", "priority", "subject", "description");
     private static final String PLANNER_PROMPT = """
             你是 SmartMall TLAI 的业务 Agent 规划器。判断是否需要调用只读工具、生成待确认操作、追问缺失参数或说明能力暂不支持，并输出严格 JSON。
             禁止输出 SQL、Markdown、解释或 JSON 以外内容；禁止选择列表之外的工具或操作；一次最多选择一个能力。
@@ -71,8 +75,9 @@ public class ReadOnlyAgentService {
             {"action":"TOOL_CALL","intent":"queryOrder","arguments":{"id":null,"keyword":"SM2026","status":""},"missingFields":[]}
             写入参数完整且明确时：
             {"action":"ACTION_PLAN","intent":"createAfterSalesTicket","arguments":{"orderId":null,"orderNo":"SM20260924082608B125E3","category":"RETURN_EXCHANGE","priority":"NORMAL","subject":"申请退货","description":"商品尺寸不合适"},"missingFields":[]}
-            写入参数缺失或“再创建一个”这类表达无法确定是否沿用历史参数时：
-            {"action":"CLARIFY","intent":"createAfterSalesTicket","arguments":{},"missingFields":["orderNo","category","subject","description"]}
+            写入参数缺失时，把用户已经明确提供的字段放入 arguments，只把仍缺少的字段放入 missingFields：
+            {"action":"CLARIFY","intent":"createAfterSalesTicket","arguments":{"orderId":null,"orderNo":"SM20260924082608B125E3","category":"LOGISTICS","priority":"NORMAL"},"missingFields":["subject","description"]}
+            “再创建一个”这类表达无法确定是否沿用历史参数时，不得自行复用，必须使用 CLARIFY。
             用户要求执行系统尚未开放的写操作时：
             {"action":"UNSUPPORTED","intent":"approveRefund","arguments":{},"missingFields":[]}
             所有示例字段都必须保留。用户未说明日期时默认最近 30 天。
@@ -123,26 +128,37 @@ public class ReadOnlyAgentService {
     }
 
     public AgentChatResult chat(List<AiChatMessage> messages, AgentUserContext user) {
+        return chat(messages, user, null);
+    }
+
+    public AgentChatResult chat(List<AiChatMessage> messages, AgentUserContext user,
+                                AgentConversationState conversationState) {
+        return chat(messages, user, conversationState, null);
+    }
+
+    public AgentChatResult chat(List<AiChatMessage> messages, AgentUserContext user,
+                                AgentConversationState conversationState, AiCallContext callContext) {
         long startedAt = System.nanoTime();
         String latestUserMessage = latestUserMessage(messages);
         if (isAmbiguousRepeatRequest(latestUserMessage)) {
             return ambiguousRepeatResult(user, elapsedMs(startedAt));
         }
-        AiChatResult planResponse = aiChatService.chatWithSystemPrompt(messages,
+        List<AiChatMessage> planningMessages = withConversationState(messages, conversationState);
+        AiChatResult planResponse = chatWithSystemPrompt(planningMessages,
                 PLANNER_PROMPT.formatted(LocalDate.now(BUSINESS_ZONE),
-                        capabilityRegistry.plannerInstructions(user)));
+                        capabilityRegistry.plannerInstructions(user)), callContext);
         AgentPlan plan;
         try {
             plan = parsePlan(planResponse.content());
         } catch (BusinessException exception) {
             if (exception.getErrorCode() != ErrorCode.AGENT_PLAN_INVALID) throw exception;
-            log.warn("Agent plan degraded to clarification: userId={}, responseLength={}",
+            log.warn("Agent 计划解析失败，已降级为澄清回复：用户ID={}，响应长度={}",
                     user.userId(), planResponse.content() == null ? 0 : planResponse.content().length());
             return invalidPlanFallback(user, planResponse.modelName(), elapsedMs(startedAt));
         }
         if (plan.action() == AgentAction.DIRECT) {
-            AiChatResult answer = aiChatService.chatWithSystemPrompt(messages,
-                    DIRECT_PROMPT.formatted(capabilityRegistry.describeAvailable(user)));
+            AiChatResult answer = chatWithSystemPrompt(messages,
+                    DIRECT_PROMPT.formatted(capabilityRegistry.describeAvailable(user)), callContext);
             return new AgentChatResult(answer.content(), answer.modelName(), elapsedMs(startedAt),
                     List.of(), null, capabilityRegistry.suggestionsFor(user, "generalChat", 3),
                     AgentResponseType.ANSWER, List.of());
@@ -167,7 +183,7 @@ public class ReadOnlyAgentService {
                 pendingAction = pendingActionService.create(plan.intent(), plan.arguments(), user);
             } catch (BusinessException exception) {
                 if (exception.getErrorCode() != ErrorCode.AGENT_PLAN_INVALID) throw exception;
-                log.warn("Invalid controlled action plan degraded to clarification: intent={}, userId={}",
+                log.warn("受控操作计划无效，已降级为澄清回复：意图={}，用户ID={}",
                         plan.intent(), user.userId());
                 return invalidActionFallback(plan.intent(), planResponse.modelName(), elapsedMs(startedAt));
             }
@@ -188,12 +204,13 @@ public class ReadOnlyAgentService {
             }
             ToolOutput output = execute(plan.intent(), plan.arguments());
             long toolLatencyMs = elapsedMs(toolStartedAt);
-            safeAudit(user, plan.intent(), argumentsJson, "SUCCESS", toolLatencyMs, null);
-            AiChatResult answer = aiChatService.chatWithSystemPrompt(messages,
-                    ANSWER_PROMPT.formatted(plan.intent(), truncate(output.json())));
+            safeAudit(user, plan.intent(), argumentsJson, "SUCCESS", toolLatencyMs, null, callContext);
+            AiChatResult answer = chatWithSystemPrompt(messages,
+                    ANSWER_PROMPT.formatted(plan.intent(), truncate(output.json())), callContext);
             AgentToolExecution trace = new AgentToolExecution(plan.intent(), definition.displayName(),
-                    output.summary(), toolLatencyMs);
-            log.info("Agent tool succeeded: tool={}, userId={}, latencyMs={}",
+                    output.summary(), toolLatencyMs,
+                    AgentToolNavigationFactory.create(plan.intent(), plan.arguments()));
+            log.info("Agent 工具执行成功：工具={}，用户ID={}，耗时毫秒={}",
                     plan.intent(), user.userId(), toolLatencyMs);
             return new AgentChatResult(answer.content(), answer.modelName(), elapsedMs(startedAt),
                     List.of(trace), null, capabilityRegistry.suggestionsFor(user, plan.intent(), 3),
@@ -202,8 +219,8 @@ public class ReadOnlyAgentService {
             long toolLatencyMs = elapsedMs(toolStartedAt);
             String errorCode = exception instanceof BusinessException business
                     ? business.getErrorCode().code() : ErrorCode.INTERNAL_ERROR.code();
-            safeAudit(user, plan.intent(), argumentsJson, "FAILED", toolLatencyMs, errorCode);
-            log.warn("Agent tool failed: tool={}, userId={}, errorCode={}",
+            safeAudit(user, plan.intent(), argumentsJson, "FAILED", toolLatencyMs, errorCode, callContext);
+            log.warn("Agent 工具执行失败：工具={}，用户ID={}，错误码={}",
                     plan.intent(), user.userId(), errorCode);
             if (exception instanceof BusinessException business
                     && business.getErrorCode() == ErrorCode.AGENT_PLAN_INVALID) {
@@ -288,8 +305,9 @@ public class ReadOnlyAgentService {
             }
             AgentCapability capability = capabilityRegistry.find(intent).orElseThrow(ReadOnlyAgentService::invalidPlan);
             if (action == AgentAction.CLARIFY) {
-                if (capability.type() != AgentCapabilityType.CONFIRM_REQUIRED || arguments.size() != 0
-                        || !validMissingFields(intent, missingFields)) throw invalidPlan();
+                if (capability.type() != AgentCapabilityType.CONFIRM_REQUIRED
+                        || !validMissingFields(intent, missingFields)
+                        || !validPartialArguments(intent, arguments, missingFields)) throw invalidPlan();
                 return new AgentPlan(action, intent, arguments, missingFields);
             }
             if (!missingFields.isEmpty()) throw invalidPlan();
@@ -298,7 +316,7 @@ public class ReadOnlyAgentService {
                     && capability.type() != AgentCapabilityType.CONFIRM_REQUIRED) throw invalidPlan();
             return new AgentPlan(action, intent, arguments, missingFields);
         } catch (JsonProcessingException | IllegalArgumentException exception) {
-            log.warn("Agent plan could not be parsed: responseLength={}", content == null ? 0 : content.length());
+            log.warn("Agent 计划解析失败：响应长度={}", content == null ? 0 : content.length());
             throw invalidPlan();
         }
     }
@@ -316,12 +334,23 @@ public class ReadOnlyAgentService {
     }
 
     private void safeAudit(AgentUserContext user, String tool, String arguments, String status,
-                           long latencyMs, String errorCode) {
+                           long latencyMs, String errorCode, AiCallContext callContext) {
         try {
-            auditService.record(user, tool, arguments, status, latencyMs, errorCode);
+            if (callContext == null) {
+                auditService.record(user, tool, arguments, status, latencyMs, errorCode);
+            } else {
+                auditService.record(user, tool, arguments, status, latencyMs, errorCode, callContext);
+            }
         } catch (RuntimeException exception) {
-            log.error("Agent tool audit could not be persisted: tool={}, userId={}", tool, user.userId(), exception);
+            log.error("Agent 工具审计记录保存失败：工具={}，用户ID={}", tool, user.userId(), exception);
         }
+    }
+
+    private AiChatResult chatWithSystemPrompt(List<AiChatMessage> messages, String systemPrompt,
+                                              AiCallContext callContext) {
+        return callContext == null
+                ? aiChatService.chatWithSystemPrompt(messages, systemPrompt)
+                : aiChatService.chatWithSystemPrompt(messages, systemPrompt, callContext);
     }
 
     private static void requireFields(JsonNode node, String... required) {
@@ -346,9 +375,11 @@ public class ReadOnlyAgentService {
 
     private AgentChatResult clarificationResult(AgentPlan plan, String modelName, long latencyMs) {
         String content = clarificationContent(plan.intent(), plan.missingFields());
+        AgentConversationState state = new AgentConversationState(
+                plan.intent(), toJson(plan.arguments()), plan.missingFields());
         return new AgentChatResult(content, modelName, latencyMs, List.of(), null,
                 clarificationSuggestions(plan.intent()), AgentResponseType.CLARIFICATION,
-                plan.missingFields());
+                plan.missingFields(), state);
     }
 
     private AgentChatResult ambiguousRepeatResult(AgentUserContext user, long latencyMs) {
@@ -359,7 +390,9 @@ public class ReadOnlyAgentService {
                 + "请确认：是沿用上一笔订单，还是为另一笔订单创建？同时请补充工单分类、主题和问题描述。";
         return new AgentChatResult(content, "SMART ROUTER", latencyMs, List.of(), null,
                 clarificationSuggestions("createAfterSalesTicket"), AgentResponseType.CLARIFICATION,
-                List.of("orderNo", "category", "subject", "description"));
+                List.of("orderNo", "category", "subject", "description"),
+                new AgentConversationState("createAfterSalesTicket", "{}",
+                        List.of("orderNo", "category", "subject", "description")));
     }
 
     private AgentChatResult unsupportedResult(String intent, AgentUserContext user,
@@ -389,7 +422,8 @@ public class ReadOnlyAgentService {
                 ? "我没能把这些信息整理成安全的待确认操作。请明确业务对象和具体操作后重试。"
                 : clarificationContent(intent, fields);
         return new AgentChatResult(content, modelName, latencyMs, List.of(), null,
-                clarificationSuggestions(intent), AgentResponseType.CLARIFICATION, fields);
+                clarificationSuggestions(intent), AgentResponseType.CLARIFICATION, fields,
+                new AgentConversationState(intent, "{}", fields));
     }
 
     private static String clarificationContent(String intent, List<String> missingFields) {
@@ -441,6 +475,45 @@ public class ReadOnlyAgentService {
             default -> Set.of();
         };
         return allowed.containsAll(fields);
+    }
+
+    private static boolean validPartialArguments(String intent, JsonNode arguments,
+                                                 List<String> missingFields) {
+        if (arguments == null || !arguments.isObject()) return false;
+        Set<String> allowed = switch (intent) {
+            case "createAfterSalesTicket" -> CREATE_TICKET_ARGUMENT_FIELDS;
+            case "addTicketReply" -> REPLY_TICKET_FIELDS;
+            default -> Set.of();
+        };
+        if (!allowed.containsAll(fieldNames(arguments))) return false;
+        for (String missingField : missingFields) {
+            JsonNode value = arguments.get(missingField);
+            if (value != null && !value.isNull()
+                    && (!value.isTextual() || !value.textValue().isBlank())) return false;
+        }
+        return arguments.toString().length() <= 4000;
+    }
+
+    private static List<AiChatMessage> withConversationState(
+            List<AiChatMessage> messages, AgentConversationState state) {
+        if (state == null || messages.isEmpty()) return messages;
+        String stateContext = """
+
+                [系统维护的多轮参数状态]
+                当前意图：%s
+                已确认参数：%s
+                尚缺字段：%s
+                这些状态来自本会话前一轮澄清。只可结合用户本轮明确补充或明确要求沿用的内容继续规划；仍不完整时继续返回 CLARIFY。
+                """.formatted(state.intent(), state.argumentsJson(), String.join(",", state.missingFields()));
+        java.util.ArrayList<AiChatMessage> enriched = new java.util.ArrayList<>(messages);
+        for (int index = enriched.size() - 1; index >= 0; index--) {
+            AiChatMessage message = enriched.get(index);
+            if (message.role() == com.smartmall.tlai.ai.model.AiMessageRole.USER) {
+                enriched.set(index, new AiChatMessage(message.role(), message.content() + stateContext));
+                break;
+            }
+        }
+        return List.copyOf(enriched);
     }
 
     private static String latestUserMessage(List<AiChatMessage> messages) {

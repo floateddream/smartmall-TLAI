@@ -3,6 +3,8 @@ package com.smartmall.tlai.ai.application;
 import com.smartmall.tlai.ai.config.AiProperties;
 import com.smartmall.tlai.ai.gateway.AiEmbeddingGateway;
 import com.smartmall.tlai.ai.model.AiModelConfig;
+import com.smartmall.tlai.ai.model.AiCallScene;
+import com.smartmall.tlai.ai.model.AiCallStatus;
 import com.smartmall.tlai.ai.model.AiModelType;
 import com.smartmall.tlai.ai.model.AiProvider;
 import com.smartmall.tlai.ai.repository.AiModelConfigRepository;
@@ -24,12 +26,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class AiEmbeddingServiceTest {
     @Mock AiModelConfigRepository repository;
     @Mock AiEmbeddingGateway gateway;
     @Mock AiCredentialCipher credentialCipher;
+    @Mock AiCallLogService callLogService;
 
     @Test
     void embedsAllInputsWithOneActiveConfiguration() {
@@ -40,13 +45,15 @@ class AiEmbeddingServiceTest {
         when(gateway.embed(config, "第二段", "ollama", Duration.ofSeconds(60)))
                 .thenReturn(new float[]{4, 5, 6});
         var service = new AiEmbeddingService(repository, gateway,
-                new AiProperties("", Duration.ofSeconds(60)), credentialCipher);
+                new AiProperties("", Duration.ofSeconds(60)), credentialCipher, callLogService);
 
         List<float[]> result = service.embedAll(List.of("第一段", "第二段"));
 
         assertThat(result).hasSize(2);
         assertThat(result.getFirst()).containsExactly(1, 2, 3);
         verify(repository).findActive(AiModelType.EMBEDDING);
+        verify(callLogService).record(eq(config), eq(AiCallScene.KNOWLEDGE_EMBEDDING),
+                eq(AiCallStatus.SUCCESS), anyLong(), eq(2), eq(6L), eq(2), eq(6L), eq(null));
     }
 
     @Test
@@ -56,12 +63,15 @@ class AiEmbeddingServiceTest {
         when(gateway.embed(config, "内容", "ollama", Duration.ofSeconds(60)))
                 .thenReturn(new float[]{1, 2});
         var service = new AiEmbeddingService(repository, gateway,
-                new AiProperties("", Duration.ofSeconds(60)), credentialCipher);
+                new AiProperties("", Duration.ofSeconds(60)), credentialCipher, callLogService);
 
         assertThatThrownBy(() -> service.embedAll(List.of("内容")))
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode())
                                 .isEqualTo(ErrorCode.AI_EMBEDDING_DIMENSION_MISMATCH));
+        verify(callLogService).record(eq(config), eq(AiCallScene.KNOWLEDGE_EMBEDDING),
+                eq(AiCallStatus.FAILED), anyLong(), eq(1), eq(2L), eq(0), eq(0L),
+                eq(ErrorCode.AI_EMBEDDING_DIMENSION_MISMATCH.code()));
     }
 
     private AiModelConfig embeddingConfig(int dimensions) {

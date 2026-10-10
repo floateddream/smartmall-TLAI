@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BarChart3, Boxes, BrainCircuit, ChevronDown, ChevronRight,
-  Database, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  Database, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, RadioTower, ScrollText,
   RotateCcw, Settings2, ShieldCheck, ShoppingBag, Ticket, UserRound, UsersRound,
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
@@ -27,10 +27,12 @@ const groups = computed(() => [
     { path: '/assistant', label: 'AI 助手', icon: BrainCircuit, permission: 'ai:chat' },
     { path: '/knowledge', label: '知识库', icon: Database, permission: 'knowledge:view' },
     { path: '/data-analysis', label: '数据分析', icon: BarChart3, permission: 'analytics:view' },
+    { path: '/agent-audits', label: 'Agent 审计', icon: ScrollText, permission: 'agent:audit_view' },
   ] },
   { label: '系统设置', items: [
     { path: '/access-control', label: '用户与权限', icon: ShieldCheck, permission: 'system:user_view' },
     { path: '/models', label: '模型配置', icon: Settings2, permission: 'system:model_manage' },
+    { path: '/ai-call-logs', label: '调用日志', icon: RadioTower, permission: 'ai:call_log_view' },
   ] },
 ].map(group => ({ ...group, items: group.items.filter(item => !item.permission || auth.can(item.permission)) }))
   .filter(group => group.items.length > 0))

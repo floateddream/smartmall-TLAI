@@ -23,7 +23,7 @@ public class KnowledgeDocumentProcessingJob {
             processor.processNext();
         } catch (RuntimeException exception) {
             // 防止基础设施异常终止后续调度；文档级失败由 Processor 自己落库。
-            log.error("Knowledge processing scheduler failed", exception);
+            log.error("知识库文档处理定时任务执行失败", exception);
         }
     }
 }

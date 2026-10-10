@@ -43,7 +43,7 @@ public class MinioObjectStorage implements ObjectStorage {
                     .contentType(contentType)
                     .build());
         } catch (Exception exception) {
-            log.error("MinIO upload failed: endpoint={}, bucket={}, objectKey={}",
+            log.error("MinIO 文件上传失败：服务地址={}，存储桶={}，对象路径={}",
                     properties.endpoint(), properties.bucket(), objectKey, exception);
             throw new BusinessException(ErrorCode.OBJECT_STORAGE_ERROR, "文件上传到对象存储失败");
         }
@@ -59,7 +59,7 @@ public class MinioObjectStorage implements ObjectStorage {
                     .bucket(properties.bucket()).object(objectKey).build());
             return new StoredObject(response, stat.size(), stat.contentType());
         } catch (Exception exception) {
-            log.error("MinIO download failed: endpoint={}, bucket={}, objectKey={}",
+            log.error("MinIO 文件下载失败：服务地址={}，存储桶={}，对象路径={}",
                     properties.endpoint(), properties.bucket(), objectKey, exception);
             throw new BusinessException(ErrorCode.OBJECT_STORAGE_ERROR, "从对象存储读取文件失败");
         }
@@ -72,7 +72,7 @@ public class MinioObjectStorage implements ObjectStorage {
             configuredClient.removeObject(RemoveObjectArgs.builder()
                     .bucket(properties.bucket()).object(objectKey).build());
         } catch (Exception exception) {
-            log.error("MinIO delete failed: endpoint={}, bucket={}, objectKey={}",
+            log.error("MinIO 文件删除失败：服务地址={}，存储桶={}，对象路径={}",
                     properties.endpoint(), properties.bucket(), objectKey, exception);
             throw new BusinessException(ErrorCode.OBJECT_STORAGE_ERROR, "从对象存储删除文件失败");
         }

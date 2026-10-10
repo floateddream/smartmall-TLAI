@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { decideRouteAccess } from '@/utils/routePolicy'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,8 +21,10 @@ const router = createRouter({
         { path: 'assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { title: 'AI 助手', section: '智能工作台', permission: 'ai:chat' } },
         { path: 'knowledge', name: 'knowledge', component: () => import('@/views/KnowledgeView.vue'), meta: { title: '知识库', section: '智能工作台', permission: 'knowledge:view' } },
         { path: 'data-analysis', name: 'data-analysis', component: () => import('@/views/AnalyticsView.vue'), meta: { title: '数据分析', section: '智能工作台', permission: 'analytics:view' } },
+        { path: 'agent-audits', name: 'agent-audits', component: () => import('@/views/AgentAuditView.vue'), meta: { title: 'Agent 审计', section: '智能工作台', permission: 'agent:audit_view' } },
         { path: 'access-control', name: 'access-control', component: () => import('@/views/AccessControlView.vue'), meta: { title: '用户与权限', section: '系统设置', permission: 'system:user_view' } },
         { path: 'models', name: 'models', component: () => import('@/views/ModelsView.vue'), meta: { title: '模型配置', section: '系统设置', permission: 'system:model_manage' } },
+        { path: 'ai-call-logs', name: 'ai-call-logs', component: () => import('@/views/AiCallLogView.vue'), meta: { title: '调用日志', section: '系统设置', permission: 'ai:call_log_view' } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
@@ -32,10 +35,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   const authenticated = await auth.restore()
-  if (to.meta.guest) return authenticated ? { name: 'dashboard' } : true
-  if (!authenticated) return { name: 'login', query: { redirect: to.fullPath } }
-  if (typeof to.meta.permission === 'string' && !auth.can(to.meta.permission)) return { name: 'dashboard' }
-  return true
+  return decideRouteAccess(to.meta, to.fullPath, authenticated, permission => auth.can(permission))
 })
 
 export default router

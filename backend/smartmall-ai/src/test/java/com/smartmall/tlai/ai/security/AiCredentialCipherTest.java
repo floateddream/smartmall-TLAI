@@ -39,4 +39,35 @@ class AiCredentialCipherTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.AI_ENCRYPTION_KEY_INVALID));
     }
+
+    @Test
+    void shouldRejectCredentialEncryptedWithAnotherMasterKey() {
+        AiCredentialCipher first = cipher(MASTER_KEY);
+        AiCredentialCipher second = cipher("another-smartmall-master-key-2026");
+        String encrypted = first.encrypt("example-sensitive-credential");
+
+        assertDecryptionFailure(() -> second.decrypt(encrypted));
+    }
+
+    @Test
+    void shouldRejectTamperedCiphertextWithoutLeakingSensitiveValues() {
+        AiCredentialCipher cipher = cipher(MASTER_KEY);
+        String encrypted = cipher.encrypt("example-sensitive-credential");
+        char replacement = encrypted.charAt(encrypted.length() - 1) == 'A' ? 'B' : 'A';
+        String tampered = encrypted.substring(0, encrypted.length() - 1) + replacement;
+
+        assertDecryptionFailure(() -> cipher.decrypt(tampered));
+    }
+
+    private AiCredentialCipher cipher(String masterKey) {
+        return new AiCredentialCipher(new AiProperties(masterKey, Duration.ofSeconds(10)));
+    }
+
+    private void assertDecryptionFailure(org.assertj.core.api.ThrowableAssert.ThrowingCallable operation) {
+        assertThatThrownBy(operation)
+                .isInstanceOfSatisfying(BusinessException.class, error -> {
+                    assertThat(error.getErrorCode()).isEqualTo(ErrorCode.AI_CREDENTIAL_DECRYPTION_FAILED);
+                    assertThat(error.getMessage()).doesNotContain("example-sensitive-credential", MASTER_KEY);
+                });
+    }
 }

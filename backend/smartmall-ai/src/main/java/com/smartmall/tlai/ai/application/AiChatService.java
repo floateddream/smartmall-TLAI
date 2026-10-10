@@ -4,6 +4,9 @@ import com.smartmall.tlai.ai.config.AiProperties;
 import com.smartmall.tlai.ai.gateway.AiChatGateway;
 import com.smartmall.tlai.ai.model.AiChatMessage;
 import com.smartmall.tlai.ai.model.AiChatResult;
+import com.smartmall.tlai.ai.model.AiCallScene;
+import com.smartmall.tlai.ai.model.AiCallStatus;
+import com.smartmall.tlai.ai.model.AiCallContext;
 import com.smartmall.tlai.ai.model.AiMessageRole;
 import com.smartmall.tlai.ai.model.AiModelConfig;
 import com.smartmall.tlai.ai.model.AiModelType;
@@ -33,49 +36,97 @@ public class AiChatService {
     private final AiChatGateway gateway;
     private final AiProperties properties;
     private final AiCredentialCipher credentialCipher;
+    private final AiCallLogService callLogService;
 
     public AiChatService(AiModelConfigRepository repository, AiChatGateway gateway,
-                         AiProperties properties, AiCredentialCipher credentialCipher) {
+                         AiProperties properties, AiCredentialCipher credentialCipher,
+                         AiCallLogService callLogService) {
         this.repository = repository;
         this.gateway = gateway;
         this.properties = properties;
         this.credentialCipher = credentialCipher;
+        this.callLogService = callLogService;
     }
 
     @Transactional(readOnly = true)
     public AiChatResult chat(List<AiChatMessage> requestedMessages) {
-        return complete(validateMessages(requestedMessages), SYSTEM_PROMPT);
+        return chat(requestedMessages, null);
+    }
+
+    @Transactional(readOnly = true)
+    public AiChatResult chat(List<AiChatMessage> requestedMessages, AiCallContext context) {
+        return complete(validateMessages(requestedMessages), SYSTEM_PROMPT,
+                AiCallScene.ASSISTANT_CHAT, context);
     }
 
     /** 供 RAG 等内部用例追加可信系统上下文，普通用户消息不能直接控制该内容。 */
     @Transactional(readOnly = true)
     public AiChatResult chatWithContext(List<AiChatMessage> requestedMessages, String systemContext) {
         List<AiChatMessage> messages = validateMessages(requestedMessages);
-        return complete(messages, buildSystemPrompt(systemContext));
+        return complete(messages, buildSystemPrompt(systemContext), AiCallScene.KNOWLEDGE_RAG, null);
     }
 
     /** 供 BI 等内部编排使用固定系统提示词，提示词不从 HTTP 请求直接接收。 */
     @Transactional(readOnly = true)
     public AiChatResult chatWithSystemPrompt(List<AiChatMessage> requestedMessages, String systemPrompt) {
+        return chatWithSystemPrompt(requestedMessages, systemPrompt, null);
+    }
+
+    @Transactional(readOnly = true)
+    public AiChatResult chatWithSystemPrompt(List<AiChatMessage> requestedMessages, String systemPrompt,
+                                             AiCallContext context) {
         if (systemPrompt == null || systemPrompt.isBlank() || systemPrompt.length() > 20_000) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "AI 系统提示词不能为空且不能超过 20000 个字符");
         }
-        return complete(validateMessages(requestedMessages), systemPrompt.trim());
+        return complete(validateMessages(requestedMessages), systemPrompt.trim(),
+                AiCallScene.INTERNAL_ORCHESTRATION, context);
     }
 
-    private AiChatResult complete(List<AiChatMessage> messages, String systemPrompt) {
+    private AiChatResult complete(List<AiChatMessage> messages, String systemPrompt, AiCallScene scene,
+                                  AiCallContext context) {
         AiModelConfig config = repository.findActive(AiModelType.CHAT)
                 .filter(AiModelConfig::enabled)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AI_MODEL_NOT_CONFIGURED));
-        log.info("AI chat started: configId={}, provider={}, model={}, messageCount={}",
+        log.info("AI 对话开始：配置ID={}，供应商={}，模型={}，消息数量={}",
                 config.id(), config.provider(), config.modelName(), messages.size());
-        String apiKey = config.credentialRequired()
-                ? credentialCipher.decrypt(config.apiKeyCiphertext()) : "ollama";
-        AiChatResult result = gateway.complete(config, messages, systemPrompt,
-                apiKey, properties.requestTimeout());
-        log.info("AI chat succeeded: configId={}, model={}, latencyMs={}",
+        long startedAt = System.nanoTime();
+        AiChatResult result;
+        try {
+            String apiKey = config.credentialRequired()
+                    ? credentialCipher.decrypt(config.apiKeyCiphertext()) : "ollama";
+            result = gateway.complete(config, messages, systemPrompt,
+                    apiKey, properties.requestTimeout());
+        } catch (RuntimeException exception) {
+            recordSafely(config, scene, AiCallStatus.FAILED, elapsedMs(startedAt), messages.size(),
+                    inputCharacters(messages, systemPrompt), 0, null,
+                    AiCallLogService.errorCode(exception), context);
+            throw exception;
+        }
+        recordSafely(config, scene, AiCallStatus.SUCCESS, elapsedMs(startedAt), messages.size(),
+                inputCharacters(messages, systemPrompt), 1, (long) result.content().length(), null, context);
+        log.info("AI 对话成功：配置ID={}，模型={}，耗时毫秒={}",
                 config.id(), result.modelName(), result.latencyMs());
         return result;
+    }
+
+    private void recordSafely(AiModelConfig config, AiCallScene scene, AiCallStatus status, long latencyMs,
+                              int inputCount, long inputCharacterCount, int outputCount,
+                              Long outputUnitCount, String errorCode, AiCallContext context) {
+        try {
+            callLogService.record(config, scene, status, latencyMs, inputCount, inputCharacterCount,
+                    outputCount, outputUnitCount, errorCode, context);
+        } catch (RuntimeException exception) {
+            log.error("AI 调用日志保存失败：配置ID={}，类型={}，调用场景={}，状态={}",
+                    config.id(), config.modelType(), scene, status, exception);
+        }
+    }
+
+    private static long inputCharacters(List<AiChatMessage> messages, String systemPrompt) {
+        return systemPrompt.length() + messages.stream().mapToLong(message -> message.content().length()).sum();
+    }
+
+    private static long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 
     private static String buildSystemPrompt(String systemContext) {

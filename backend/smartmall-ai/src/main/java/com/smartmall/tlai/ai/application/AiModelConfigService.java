@@ -4,6 +4,8 @@ import com.smartmall.tlai.ai.config.AiProperties;
 import com.smartmall.tlai.ai.gateway.AiChatGateway;
 import com.smartmall.tlai.ai.gateway.AiEmbeddingGateway;
 import com.smartmall.tlai.ai.model.AiChatMessage;
+import com.smartmall.tlai.ai.model.AiCallScene;
+import com.smartmall.tlai.ai.model.AiCallStatus;
 import com.smartmall.tlai.ai.model.AiMessageRole;
 import com.smartmall.tlai.ai.model.AiModelConfig;
 import com.smartmall.tlai.ai.model.AiModelType;
@@ -33,15 +35,18 @@ public class AiModelConfigService {
     private final AiEmbeddingGateway embeddingGateway;
     private final AiProperties properties;
     private final AiCredentialCipher credentialCipher;
+    private final AiCallLogService callLogService;
 
     public AiModelConfigService(AiModelConfigRepository repository, AiChatGateway gateway,
                                 AiEmbeddingGateway embeddingGateway,
-                                AiProperties properties, AiCredentialCipher credentialCipher) {
+                                AiProperties properties, AiCredentialCipher credentialCipher,
+                                AiCallLogService callLogService) {
         this.repository = repository;
         this.gateway = gateway;
         this.embeddingGateway = embeddingGateway;
         this.properties = properties;
         this.credentialCipher = credentialCipher;
+        this.callLogService = callLogService;
     }
 
     @Transactional(readOnly = true)
@@ -65,7 +70,7 @@ public class AiModelConfigService {
                 requireTemperature(command.temperature()), requireMaxTokens(command.maxTokens()),
                 requireEmbeddingDimensions(command.embeddingDimensions(), modelType), false, true,
                 command.operatorId(), command.operatorId(), now, now));
-        log.info("AI model configuration created: id={}, name={}, type={}, provider={}, model={}, operatorId={}",
+        log.info("AI 模型配置创建成功：配置ID={}，名称={}，类型={}，供应商={}，模型={}，操作人ID={}",
                 created.id(), created.name(), created.modelType(), created.provider(), created.modelName(), command.operatorId());
         return created;
     }
@@ -100,7 +105,7 @@ public class AiModelConfigService {
                 requireTemperature(command.temperature()), requireMaxTokens(command.maxTokens()),
                 requireEmbeddingDimensions(command.embeddingDimensions(), modelType), current.active(), current.enabled(),
                 current.createdBy(), command.operatorId(), current.createdAt(), now));
-        log.info("AI model configuration updated: id={}, name={}, type={}, provider={}, model={}, credentialChanged={}, operatorId={}",
+        log.info("AI 模型配置更新成功：配置ID={}，名称={}，类型={}，供应商={}，模型={}，密钥是否变更={}，操作人ID={}",
                 updated.id(), updated.name(), updated.modelType(), updated.provider(), updated.modelName(),
                 command.apiKey() != null && !command.apiKey().isBlank(), command.operatorId());
         return updated;
@@ -120,7 +125,7 @@ public class AiModelConfigService {
         repository.clearActive(config.modelType(), now, operatorId);
         repository.updateActive(id, true, now, operatorId);
         AiModelConfig activated = requireConfig(id);
-        log.info("AI model activated: id={}, type={}, provider={}, model={}, operatorId={}",
+        log.info("AI 模型已激活：配置ID={}，类型={}，供应商={}，模型={}，操作人ID={}",
                 activated.id(), activated.modelType(), activated.provider(), activated.modelName(), operatorId);
         return activated;
     }
@@ -132,32 +137,56 @@ public class AiModelConfigService {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         repository.updateEnabled(id, enabled, now, operatorId);
         AiModelConfig changed = requireConfig(id);
-        log.info("AI model enabled state changed: id={}, enabled={}, operatorId={}", id, enabled, operatorId);
+        log.info("AI 模型启用状态已变更：配置ID={}，是否启用={}，操作人ID={}", id, enabled, operatorId);
         return changed;
     }
 
     @Transactional(readOnly = true)
     public String test(long id) {
         AiModelConfig config = requireConfig(id);
-        log.info("AI model connectivity test started: id={}, type={}, provider={}, model={}",
+        log.info("AI 模型连通性测试开始：配置ID={}，类型={}，供应商={}，模型={}",
                 config.id(), config.modelType(), config.provider(), config.modelName());
-        if (config.modelType() == AiModelType.EMBEDDING) {
-            long startedAt = System.nanoTime();
-            float[] vector = embeddingGateway.embed(config, TEST_PROMPT, resolveApiKey(config), properties.requestTimeout());
-            if (vector.length != config.embeddingDimensions()) {
-                throw new BusinessException(ErrorCode.AI_EMBEDDING_DIMENSION_MISMATCH,
-                        "配置维度为 %d，但模型实际返回 %d 维".formatted(config.embeddingDimensions(), vector.length));
+        long startedAt = System.nanoTime();
+        try {
+            if (config.modelType() == AiModelType.EMBEDDING) {
+                float[] vector = embeddingGateway.embed(config, TEST_PROMPT, resolveApiKey(config), properties.requestTimeout());
+                if (vector.length != config.embeddingDimensions()) {
+                    throw new BusinessException(ErrorCode.AI_EMBEDDING_DIMENSION_MISMATCH,
+                            "配置维度为 %d，但模型实际返回 %d 维".formatted(config.embeddingDimensions(), vector.length));
+                }
+                long latencyMs = elapsedMs(startedAt);
+                recordTestSafely(config, AiCallStatus.SUCCESS, latencyMs, 1, (long) vector.length, null);
+                log.info("AI 向量模型连通性测试成功：配置ID={}，供应商={}，模型={}，向量维度={}，耗时毫秒={}",
+                        config.id(), config.provider(), config.modelName(), vector.length, latencyMs);
+                return "连接成功，返回 %d 维向量，耗时 %d ms".formatted(vector.length, latencyMs);
             }
-            long latencyMs = java.time.Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
-            log.info("AI embedding connectivity test succeeded: id={}, provider={}, model={}, dimensions={}, latencyMs={}",
-                    config.id(), config.provider(), config.modelName(), vector.length, latencyMs);
-            return "连接成功，返回 %d 维向量，耗时 %d ms".formatted(vector.length, latencyMs);
+            var result = gateway.complete(config, List.of(new AiChatMessage(AiMessageRole.USER, TEST_PROMPT)),
+                    "你是模型连通性检测助手。", resolveApiKey(config), properties.requestTimeout());
+            recordTestSafely(config, AiCallStatus.SUCCESS, elapsedMs(startedAt), 1,
+                    (long) result.content().length(), null);
+            log.info("AI 对话模型连通性测试成功：配置ID={}，供应商={}，模型={}，耗时毫秒={}",
+                    config.id(), config.provider(), config.modelName(), result.latencyMs());
+            return result.content();
+        } catch (RuntimeException exception) {
+            recordTestSafely(config, AiCallStatus.FAILED, elapsedMs(startedAt), 0, null,
+                    AiCallLogService.errorCode(exception));
+            throw exception;
         }
-        var result = gateway.complete(config, List.of(new AiChatMessage(AiMessageRole.USER, TEST_PROMPT)),
-                "你是模型连通性检测助手。", resolveApiKey(config), properties.requestTimeout());
-        log.info("AI chat connectivity test succeeded: id={}, provider={}, model={}, latencyMs={}",
-                config.id(), config.provider(), config.modelName(), result.latencyMs());
-        return result.content();
+    }
+
+    private void recordTestSafely(AiModelConfig config, AiCallStatus status, long latencyMs,
+                                  int outputCount, Long outputUnitCount, String errorCode) {
+        try {
+            callLogService.record(config, AiCallScene.MODEL_CONNECTIVITY_TEST, status, latencyMs,
+                    1, TEST_PROMPT.length(), outputCount, outputUnitCount, errorCode);
+        } catch (RuntimeException exception) {
+            log.error("AI 连通性测试日志保存失败：配置ID={}，类型={}，状态={}",
+                    config.id(), config.modelType(), status, exception);
+        }
+    }
+
+    private static long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 
     private AiModelConfig requireConfig(long id) {

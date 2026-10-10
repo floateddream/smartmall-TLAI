@@ -1,6 +1,7 @@
 package com.smartmall.tlai.agent.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartmall.tlai.agent.model.AgentConversationState;
 import com.smartmall.tlai.agent.model.AgentUserContext;
 import com.smartmall.tlai.agent.model.AgentPendingAction;
 import com.smartmall.tlai.agent.model.AgentResponseType;
@@ -29,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -61,6 +64,8 @@ class ReadOnlyAgentServiceTest {
         assertThat(result.tools()).singleElement().satisfies(tool -> {
             assertThat(tool.toolName()).isEqualTo("queryOrder");
             assertThat(tool.displayName()).isEqualTo("订单查询");
+            assertThat(tool.navigation().path()).isEqualTo("/orders");
+            assertThat(tool.navigation().query()).containsEntry("keyword", "SM2026");
         });
         verify(orderService).list(1, 5, "SM2026", "");
         verify(auditService).record(org.mockito.ArgumentMatchers.any(),
@@ -153,7 +158,52 @@ class ReadOnlyAgentServiceTest {
         assertThat(result.missingFields()).containsExactly("orderNo", "subject", "description");
         assertThat(result.content()).contains("订单号", "问题主题", "具体问题描述");
         assertThat(result.pendingAction()).isNull();
+        assertThat(result.conversationState()).isNotNull();
+        assertThat(result.conversationState().intent()).isEqualTo("createAfterSalesTicket");
+        assertThat(result.conversationState().argumentsJson()).isEqualTo("{}");
+        assertThat(result.conversationState().missingFields())
+                .containsExactly("orderNo", "subject", "description");
         verifyNoInteractions(pendingActionService);
+    }
+
+    @Test
+    void injectsPreviousParameterStateIntoLatestUserMessage() {
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+                .thenReturn(new AiChatResult("""
+                        {"action":"CLARIFY","intent":"createAfterSalesTicket","arguments":{"orderNo":"SM20260001"},"missingFields":["subject","description"]}
+                        """, "planner", 20));
+        var state = new AgentConversationState("createAfterSalesTicket",
+                "{\"orderNo\":\"SM20260001\",\"category\":\"LOGISTICS\"}",
+                List.of("subject", "description"));
+
+        service().chat(List.of(new AiChatMessage(AiMessageRole.USER, "主题是物流停滞")),
+                new AgentUserContext(7L, "admin", Set.of("ticket:create")), state);
+
+        verify(aiChatService).chatWithSystemPrompt(argThat(chat -> {
+            String content = chat.getLast().content();
+            return content.contains("[系统维护的多轮参数状态]")
+                    && content.contains("SM20260001")
+                    && content.contains("subject,description");
+        }), anyString());
+    }
+
+    @Test
+    void completedActionPlanDoesNotRetainConversationState() {
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+                .thenReturn(new AiChatResult("""
+                        {"action":"ACTION_PLAN","intent":"createAfterSalesTicket","arguments":{"orderId":null,"orderNo":"SM20260001","category":"LOGISTICS","priority":"NORMAL","subject":"物流停滞","description":"三天没有更新"},"missingFields":[]}
+                        """, "planner", 20));
+        when(pendingActionService.create(eq("createAfterSalesTicket"),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new AgentPendingAction("token", "createAfterSalesTicket", "创建售后工单",
+                        "订单号：SM20260001", OffsetDateTime.now().plusMinutes(10)));
+
+        var result = service().chat(messages(),
+                new AgentUserContext(7L, "admin", Set.of("ticket:create")),
+                new AgentConversationState("createAfterSalesTicket", "{}", List.of("subject")));
+
+        assertThat(result.responseType()).isEqualTo(AgentResponseType.ACTION_CONFIRMATION);
+        assertThat(result.conversationState()).isNull();
     }
 
     @Test

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, Eye, MessageSquareReply, Plus, RefreshCw, Search, Send, TicketCheck } from 'lucide-vue-next'
 import { ApiError } from '@/api/client'
@@ -8,8 +9,10 @@ import type { Order } from '@/api/orders'
 import { ticketApi } from '@/api/tickets'
 import type { CreateTicketInput, Ticket, TicketCategory, TicketPriority, TicketStatus } from '@/api/tickets'
 import { useAuthStore } from '@/stores/auth'
+import { readPositiveQueryId, readQueryEnum, readQueryText } from '@/utils/routeQuery'
 
 const auth = useAuthStore()
+const route = useRoute()
 const rows = ref<Ticket[]>([])
 const page = ref(1)
 const total = ref(0)
@@ -25,12 +28,15 @@ const orderOptions = ref<Order[]>([])
 const orderSearchLoading = ref(false)
 const detailOpen = ref(false)
 const detailLoading = ref(false)
+const detailError = ref('')
+const detailId = ref<number | null>(null)
 const detail = ref<Ticket | null>(null)
 const replyContent = ref('')
 const statusRemark = ref('')
 const acting = ref(false)
 let requestId = 0
 let orderRequestId = 0
+let detailRequestId = 0
 
 const createForm = reactive<{
   orderId: number | null
@@ -81,6 +87,11 @@ async function loadPage(nextPage = page.value) {
   try {
     const result = await ticketApi.list(nextPage, keyword.value.trim(), statusFilter.value, categoryFilter.value)
     if (current !== requestId) return
+    const lastPage = Math.max(1, Math.ceil(result.total / 20))
+    if (result.total > 0 && nextPage > lastPage) {
+      await loadPage(lastPage)
+      return
+    }
     rows.value = result.items
     total.value = result.total
   } catch (error) {
@@ -91,6 +102,13 @@ async function loadPage(nextPage = page.value) {
   } finally {
     if (current === requestId) loading.value = false
   }
+}
+
+function resetFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+  categoryFilter.value = ''
+  void loadPage(1)
 }
 
 async function searchOrders(query: string) {
@@ -140,18 +158,22 @@ async function createTicket() {
 }
 
 async function openDetail(id: number) {
+  const currentRequest = ++detailRequestId
+  detailId.value = id
   detailOpen.value = true
   detailLoading.value = true
+  detailError.value = ''
   detail.value = null
   replyContent.value = ''
   statusRemark.value = ''
   try {
-    detail.value = await ticketApi.get(id)
+    const response = await ticketApi.get(id)
+    if (currentRequest === detailRequestId) detail.value = response
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : '工单详情加载失败')
-    detailOpen.value = false
+    if (currentRequest !== detailRequestId) return
+    detailError.value = error instanceof ApiError ? error.message : '工单详情加载失败'
   } finally {
-    detailLoading.value = false
+    if (currentRequest === detailRequestId) detailLoading.value = false
   }
 }
 
@@ -198,7 +220,14 @@ async function advanceStatus() {
   }
 }
 
-onMounted(() => { void loadPage(1) })
+onMounted(() => {
+  keyword.value = readQueryText(route.query.keyword)
+  statusFilter.value = readQueryEnum(route.query.status, statuses.map(item => item.value))
+  categoryFilter.value = readQueryEnum(route.query.category, categories.map(item => item.value))
+  const detailId = readPositiveQueryId(route.query.id)
+  void loadPage(1)
+  if (detailId !== null) void openDetail(detailId)
+})
 </script>
 
 <template>
@@ -209,16 +238,17 @@ onMounted(() => { void loadPage(1) })
     </div>
 
     <div class="catalog-toolbar ticket-toolbar">
-      <el-input v-model="keyword" placeholder="搜索工单、订单、客户或主题" clearable aria-label="搜索工单" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
+      <el-input v-model="keyword" placeholder="搜索工单、订单、客户或主题" clearable aria-label="搜索工单" :disabled="loading" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
         <template #prefix><Search :size="16" /></template>
       </el-input>
-      <el-select v-model="statusFilter" class="ticket-filter" aria-label="筛选工单状态" @change="loadPage(1)">
+      <el-select v-model="statusFilter" class="ticket-filter" aria-label="筛选工单状态" :disabled="loading" @change="loadPage(1)">
         <el-option label="全部状态" value="" /><el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
-      <el-select v-model="categoryFilter" class="ticket-filter" aria-label="筛选工单分类" @change="loadPage(1)">
+      <el-select v-model="categoryFilter" class="ticket-filter" aria-label="筛选工单分类" :disabled="loading" @change="loadPage(1)">
         <el-option label="全部分类" value="" /><el-option v-for="item in categories" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
-      <button type="button" class="icon-button catalog-refresh" title="刷新列表" aria-label="刷新列表" @click="loadPage()"><RefreshCw :size="17" /></button>
+      <button v-if="keyword || statusFilter || categoryFilter" type="button" class="text-link" :disabled="loading" @click="resetFilters">重置</button>
+      <button type="button" class="icon-button catalog-refresh" title="刷新列表" aria-label="刷新列表" :disabled="loading" @click="loadPage()"><RefreshCw :size="17" :class="{ spinning: loading }" /></button>
       <span class="catalog-count">共 {{ total }} 笔工单</span>
     </div>
 
@@ -264,7 +294,8 @@ onMounted(() => { void loadPage(1) })
     </el-dialog>
 
     <el-drawer v-model="detailOpen" title="工单处理" size="min(650px, 96vw)" class="ticket-detail-drawer">
-      <div v-if="detailLoading" class="catalog-feedback">正在加载工单详情...</div>
+      <div v-if="detailLoading" class="catalog-feedback" role="status">正在加载工单详情...</div>
+      <div v-else-if="detailError" class="catalog-feedback catalog-feedback--error" role="alert">{{ detailError }} <button v-if="detailId" type="button" class="text-link" @click="openDetail(detailId)">重试</button></div>
       <div v-else-if="detail" class="ticket-detail">
         <header class="ticket-detail__header">
           <div><p class="eyebrow">SERVICE TICKET</p><h2>{{ detail.subject }}</h2><span class="mono">{{ detail.ticketNo }}</span></div>

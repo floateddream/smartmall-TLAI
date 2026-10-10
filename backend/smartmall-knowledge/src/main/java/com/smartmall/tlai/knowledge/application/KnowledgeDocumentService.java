@@ -63,7 +63,7 @@ public class KnowledgeDocumentService {
                     normalizedContentType, sizeBytes, extension, KnowledgeDocumentStatus.UPLOADED,
                     0, null, uploaderId, null, now, now);
             KnowledgeDocument saved = repository.insert(document);
-            log.info("Knowledge document uploaded: id={}, objectKey={}, size={}, uploaderId={}",
+            log.info("知识库文档上传成功：文档ID={}，对象路径={}，文件大小={}，上传人ID={}",
                     saved.id(), objectKey, sizeBytes, uploaderId);
             return saved;
         } catch (RuntimeException exception) {
@@ -72,7 +72,7 @@ public class KnowledgeDocumentService {
                 objectStorage.delete(objectKey);
             } catch (RuntimeException cleanupFailure) {
                 exception.addSuppressed(cleanupFailure);
-                log.error("Failed to clean up orphan knowledge object: objectKey={}", objectKey, cleanupFailure);
+                log.error("清理知识库孤立对象失败：对象路径={}", objectKey, cleanupFailure);
             }
             throw exception;
         }
@@ -90,7 +90,7 @@ public class KnowledgeDocumentService {
         if (!repository.deleteById(id)) {
             throw new BusinessException(ErrorCode.KNOWLEDGE_DOCUMENT_NOT_FOUND);
         }
-        log.info("Knowledge document deleted: id={}, objectKey={}", id, document.objectKey());
+        log.info("知识库文档删除成功：文档ID={}，对象路径={}", id, document.objectKey());
     }
 
     public void retry(long id) {
@@ -100,7 +100,7 @@ public class KnowledgeDocumentService {
             throw new BusinessException(ErrorCode.KNOWLEDGE_PROCESSING_STATE_INVALID,
                     "只有处理失败的文档可以重新处理");
         }
-        log.info("Knowledge document queued for retry: id={}", id);
+        log.info("知识库文档已加入重试队列：文档ID={}", id);
     }
 
     private KnowledgeDocument requireDocument(long id) {

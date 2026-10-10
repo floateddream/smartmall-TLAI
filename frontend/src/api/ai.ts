@@ -1,5 +1,6 @@
-import { api } from '@/api/client'
+import { ApiError, api, tokenStorage } from '@/api/client'
 import type { ApiResponse } from '@/types/api'
+import type { PageResult } from '@/api/catalog'
 
 export type AiModelType = 'CHAT' | 'EMBEDDING'
 export type AiProviderCode = 'OPENAI' | 'DEEPSEEK' | 'QWEN' | 'MOONSHOT' | 'ZHIPU' | 'OLLAMA' | 'OPENAI_COMPATIBLE'
@@ -86,6 +87,12 @@ export interface AiAgentTool {
   displayName: string
   summary: string
   latencyMs: number
+  navigation?: AiAgentNavigation | null
+}
+
+export interface AiAgentNavigation {
+  path: '/orders' | '/refunds' | '/tickets' | '/knowledge' | '/data-analysis'
+  query: Record<string, string>
 }
 
 export interface AiPendingAction {
@@ -115,6 +122,133 @@ export interface AiChatSource {
   score: number
 }
 
+export type AiConversationStatus = 'ACTIVE' | 'ARCHIVED'
+
+export interface AiConversation {
+  id: number
+  title: string
+  status: AiConversationStatus
+  awaitingParameters: boolean
+  lastMessageAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AiConversationMessage extends AiChatMessage {
+  id: number
+  responseType: AiResponseType | null
+  modelName: string | null
+  latencyMs: number | null
+  tools: AiAgentTool[]
+  suggestions: AiSuggestion[]
+  missingFields: string[]
+  createdAt: string
+}
+
+export interface AiConversationTurn {
+  conversation: AiConversation
+  userMessageId: number
+  assistantMessageId: number
+  reply: AiChatReply
+}
+
+export interface AiAgentAudit {
+  id: number
+  userId: number | null
+  username: string
+  toolName: string
+  argumentKeys: string[]
+  status: 'SUCCESS' | 'FAILED'
+  latencyMs: number
+  errorCode: string | null
+  traceId: string | null
+  conversationId: number | null
+  createdAt: string
+}
+
+export type AiCallScene = 'ASSISTANT_CHAT' | 'KNOWLEDGE_RAG' | 'INTERNAL_ORCHESTRATION'
+  | 'KNOWLEDGE_EMBEDDING' | 'MODEL_CONNECTIVITY_TEST'
+
+export interface AiCallLog {
+  id: number
+  modelConfigId: number | null
+  modelType: AiModelType
+  provider: AiProviderCode
+  modelName: string
+  scene: AiCallScene
+  status: 'SUCCESS' | 'FAILED'
+  latencyMs: number
+  inputCount: number
+  inputCharacterCount: number
+  outputCount: number
+  outputUnitCount: number | null
+  errorCode: string | null
+  traceId: string | null
+  conversationId: number | null
+  createdAt: string
+}
+
+export interface AiCallLogFilters {
+  modelType?: string
+  provider?: string
+  scene?: string
+  status?: string
+  traceId?: string
+}
+
+export interface AiStreamHandlers {
+  onDelta: (content: string) => void
+  onResult: (turn: AiConversationTurn) => void
+}
+
+async function streamConversationMessage(
+  conversationId: number,
+  content: string,
+  handlers: AiStreamHandlers,
+  signal?: AbortSignal,
+) {
+  const token = tokenStorage.get()
+  const response = await fetch(`/api/ai/conversations/${conversationId}/messages/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ content }),
+    signal,
+  })
+  if (!response.ok || !response.body) {
+    const body = await response.json().catch(() => null) as ApiResponse<unknown> | null
+    throw new ApiError(body?.message || '无法建立 AI 流式连接', body?.code || 'STREAM_ERROR', response.status)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    buffer = buffer.replace(/\r\n/g, '\n')
+    let boundary = buffer.indexOf('\n\n')
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary)
+      buffer = buffer.slice(boundary + 2)
+      const event = block.split('\n').find(line => line.startsWith('event:'))?.slice(6).trim()
+      const dataText = block.split('\n').filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).trimStart()).join('\n')
+      if (event && dataText) {
+        const data = JSON.parse(dataText) as Record<string, unknown>
+        if (event === 'delta') handlers.onDelta(String(data.content || ''))
+        if (event === 'result') handlers.onResult(data as unknown as AiConversationTurn)
+        if (event === 'error') throw new ApiError(String(data.message || 'AI 请求失败'), String(data.code || 'STREAM_ERROR'))
+      }
+      boundary = buffer.indexOf('\n\n')
+    }
+    if (done) break
+  }
+}
+
 export const aiApi = {
   listCapabilities: async () =>
     (await api.get<ApiResponse<AiCapability[]>>('/ai/capabilities')).data.data,
@@ -142,4 +276,25 @@ export const aiApi = {
     (await api.post<ApiResponse<AiAgentActionResult>>('/ai/agent/confirm', { token }, { timeout: 130000 })).data.data,
   cancelAgentAction: async (token: string) =>
     (await api.post<ApiResponse<AiAgentActionResult>>('/ai/agent/cancel', { token })).data.data,
+  createConversation: async () =>
+    (await api.post<ApiResponse<AiConversation>>('/ai/conversations')).data.data,
+  listConversations: async (page = 1, size = 30) =>
+    (await api.get<ApiResponse<PageResult<AiConversation>>>('/ai/conversations', { params: { page, size } })).data.data,
+  listConversationMessages: async (conversationId: number) =>
+    (await api.get<ApiResponse<AiConversationMessage[]>>(`/ai/conversations/${conversationId}/messages`)).data.data,
+  archiveConversation: async (conversationId: number) =>
+    api.delete(`/ai/conversations/${conversationId}`),
+  streamConversationMessage,
+  listAgentAudits: async (page = 1, size = 20, toolName = '', status = '', traceId = '') =>
+    (await api.get<ApiResponse<PageResult<AiAgentAudit>>>('/ai/agent/audits', {
+      params: { page, size, toolName: toolName || undefined, status: status || undefined, traceId: traceId || undefined },
+    })).data.data,
+  getAgentAudit: async (id: number) =>
+    (await api.get<ApiResponse<AiAgentAudit>>(`/ai/agent/audits/${id}`)).data.data,
+  listCallLogs: async (page = 1, size = 20, filters: AiCallLogFilters = {}) =>
+    (await api.get<ApiResponse<PageResult<AiCallLog>>>('/ai/call-logs', {
+      params: { page, size, ...filters },
+    })).data.data,
+  getCallLog: async (id: number) =>
+    (await api.get<ApiResponse<AiCallLog>>(`/ai/call-logs/${id}`)).data.data,
 }

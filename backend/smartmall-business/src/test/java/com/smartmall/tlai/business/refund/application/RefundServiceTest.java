@@ -76,6 +76,29 @@ class RefundServiceTest {
         verify(productRepository, never()).releaseStock(anyLong(), anyInt());
     }
 
+    @Test
+    void completedRefundCannotBeApprovedAgainOrRestoreStockAgain() {
+        when(refundRepository.findById(5)).thenReturn(Optional.of(refund(RefundStatus.COMPLETED)));
+
+        assertThatThrownBy(() -> service().approve(5, new ReviewRefundCommand(2, "admin", "再次通过")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> org.assertj.core.api.Assertions.assertThat(error.getErrorCode())
+                                .isEqualTo(ErrorCode.REFUND_STATUS_INVALID));
+        verify(orderRepository, never()).markRefunded(anyLong(), any(OffsetDateTime.class));
+        verify(productRepository, never()).releaseStock(anyLong(), anyInt());
+    }
+
+    @Test
+    void rejectedRefundCannotBeReviewedAgain() {
+        when(refundRepository.findById(5)).thenReturn(Optional.of(refund(RefundStatus.REJECTED)));
+
+        assertThatThrownBy(() -> service().reject(5, new ReviewRefundCommand(2, "admin", "再次驳回")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> org.assertj.core.api.Assertions.assertThat(error.getErrorCode())
+                                .isEqualTo(ErrorCode.REFUND_STATUS_INVALID));
+        verify(orderRepository, never()).restorePaidFromRefunding(anyLong(), any(OffsetDateTime.class));
+    }
+
     private RefundService service() {
         return new RefundService(refundRepository, orderRepository, productRepository);
     }

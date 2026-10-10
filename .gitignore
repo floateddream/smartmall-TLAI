@@ -10,7 +10,12 @@
 # Node
 **/node_modules/
 **/dist/
+**/.test-dist/
 **/*.tsbuildinfo
+
+# Python generated caches
+**/__pycache__/
+**/*.py[cod]
 
 # Local configuration and secrets
 .env

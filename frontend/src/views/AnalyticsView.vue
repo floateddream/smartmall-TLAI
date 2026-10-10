@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { BarChart3, CalendarRange, CircleAlert, Database, Hash, History, MessageSquareText, RefreshCw, Sparkles, Trophy } from 'lucide-vue-next'
 import AnalyticsChart from '@/components/AnalyticsChart.vue'
 import { ApiError } from '@/api/client'
@@ -14,6 +15,7 @@ import {
   type AnalyticsResult,
 } from '@/api/analytics'
 import { useAuthStore } from '@/stores/auth'
+import { readIsoDate, readQueryEnum, readQueryInteger, validDateRange } from '@/utils/routeQuery'
 
 type ReportCode =
   | 'ORDER_TREND'
@@ -43,6 +45,7 @@ const reportPresets: ReportPreset[] = [
 ]
 
 const auth = useAuthStore()
+const route = useRoute()
 
 const labelTranslations: Record<string, string> = {
   OPEN: '待处理',
@@ -86,6 +89,8 @@ const auditMode = ref<AnalyticsQueryMode | ''>('')
 const auditStatus = ref<AnalyticsAuditStatus | ''>('')
 const auditLoading = ref(false)
 const auditError = ref('')
+let analysisRequestId = 0
+let auditRequestId = 0
 
 const activePreset = computed(() => reportPresets.find(item => item.code === selectedCode.value) ?? reportPresets[0])
 const isTimeline = computed(() => activePreset.value.dimension === 'DATE')
@@ -130,18 +135,34 @@ function auditQueryLabel(audit: AnalyticsAudit) {
 
 async function loadAudits(nextPage = auditPage.value) {
   if (!canViewAudits.value) return
+  const currentRequest = ++auditRequestId
   auditLoading.value = true
   auditError.value = ''
   auditPage.value = nextPage
   try {
     const response = await analyticsApi.listAudits(nextPage, auditMode.value, auditStatus.value)
+    if (currentRequest !== auditRequestId) return
+    const lastPage = Math.max(1, Math.ceil(response.total / 10))
+    if (response.total > 0 && nextPage > lastPage) {
+      await loadAudits(lastPage)
+      return
+    }
     audits.value = response.items
     auditTotal.value = response.total
   } catch (error) {
+    if (currentRequest !== auditRequestId) return
+    audits.value = []
+    auditTotal.value = 0
     auditError.value = error instanceof ApiError ? error.message : '查询审计加载失败'
   } finally {
-    auditLoading.value = false
+    if (currentRequest === auditRequestId) auditLoading.value = false
   }
+}
+
+function resetAuditFilters() {
+  auditMode.value = ''
+  auditStatus.value = ''
+  void loadAudits(1)
 }
 
 function estimatedBucketCount() {
@@ -160,6 +181,7 @@ function estimatedBucketCount() {
 }
 
 async function runAnalysis() {
+  const currentRequest = ++analysisRequestId
   lastRequestMode.value = 'structured'
   errorMessage.value = ''
   if (!dateRange.value?.[0] || !dateRange.value?.[1]) {
@@ -172,8 +194,9 @@ async function runAnalysis() {
   }
 
   loading.value = true
+  naturalLoading.value = false
   try {
-    result.value = await analyticsApi.query({
+    const response = await analyticsApi.query({
       metric: activePreset.value.metric,
       dimension: activePreset.value.dimension,
       granularity: granularity.value,
@@ -181,14 +204,19 @@ async function runAnalysis() {
       endDate: dateRange.value[1],
       limit: limit.value,
     })
+    if (currentRequest !== analysisRequestId) return
+    result.value = response
     explanation.value = ''
     explanationModel.value = ''
     explanationLatency.value = 0
   } catch (error) {
+    if (currentRequest !== analysisRequestId) return
     errorMessage.value = error instanceof ApiError ? error.message : '分析请求失败，请稍后重试'
   } finally {
-    loading.value = false
-    void loadAudits(1)
+    if (currentRequest === analysisRequestId) {
+      loading.value = false
+      void loadAudits(1)
+    }
   }
 }
 
@@ -203,21 +231,27 @@ function syncQueryControls(analytics: AnalyticsResult) {
 async function askData() {
   const content = question.value.trim()
   if (!content || naturalLoading.value) return
+  const currentRequest = ++analysisRequestId
   lastRequestMode.value = 'natural'
   errorMessage.value = ''
   naturalLoading.value = true
+  loading.value = false
   try {
     const response = await analyticsApi.naturalLanguage(content)
+    if (currentRequest !== analysisRequestId) return
     result.value = response
     syncQueryControls(response)
     explanation.value = response.explanation
     explanationModel.value = response.modelName
     explanationLatency.value = response.latencyMs
   } catch (error) {
+    if (currentRequest !== analysisRequestId) return
     errorMessage.value = error instanceof ApiError ? error.message : '智能分析失败，请换一种说法后重试'
   } finally {
-    naturalLoading.value = false
-    void loadAudits(1)
+    if (currentRequest === analysisRequestId) {
+      naturalLoading.value = false
+      void loadAudits(1)
+    }
   }
 }
 
@@ -226,7 +260,23 @@ function useSuggestion(value: string) {
   void askData()
 }
 
-onMounted(runAnalysis)
+function applyRouteFilters() {
+  const report = readQueryEnum(route.query.report, reportPresets.map(item => item.code))
+  if (report) selectedCode.value = report
+  const startDate = readIsoDate(route.query.startDate)
+  const endDate = readIsoDate(route.query.endDate)
+  if (validDateRange(startDate, endDate)) dateRange.value = [startDate, endDate]
+  const routeGranularity = readQueryEnum(route.query.granularity,
+    ['DAY', 'WEEK', 'MONTH'] as AnalyticsGranularity[])
+  if (routeGranularity) granularity.value = routeGranularity
+  const routeLimit = readQueryInteger(route.query.limit, 1, 50)
+  if (routeLimit !== null) limit.value = routeLimit
+}
+
+onMounted(() => {
+  applyRouteFilters()
+  void runAnalysis()
+})
 </script>
 
 <template>
@@ -369,17 +419,18 @@ onMounted(runAnalysis)
       </div>
 
       <div class="analytics-audit__filters">
-        <el-select v-model="auditMode" placeholder="全部查询模式" @change="loadAudits(1)">
+        <el-select v-model="auditMode" placeholder="全部查询模式" :disabled="auditLoading" aria-label="筛选查询模式" @change="loadAudits(1)">
           <el-option label="全部查询模式" value="" />
           <el-option label="结构化查询" value="STRUCTURED" />
           <el-option label="自然语言" value="NATURAL_LANGUAGE" />
         </el-select>
-        <el-select v-model="auditStatus" placeholder="全部状态" @change="loadAudits(1)">
+        <el-select v-model="auditStatus" placeholder="全部状态" :disabled="auditLoading" aria-label="筛选审计状态" @change="loadAudits(1)">
           <el-option label="全部状态" value="" />
           <el-option label="成功" value="SUCCESS" />
           <el-option label="失败" value="FAILED" />
         </el-select>
         <span>共 {{ auditTotal }} 条记录</span>
+        <button v-if="auditMode || auditStatus" type="button" class="text-link" :disabled="auditLoading" @click="resetAuditFilters">重置</button>
       </div>
 
       <div v-if="auditError" class="analytics-feedback" role="alert">

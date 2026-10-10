@@ -22,7 +22,13 @@ const roleFilter = ref('')
 const enabledFilter = ref<boolean | ''>('')
 const loadingUsers = ref(false)
 const loadingRoles = ref(false)
+const userLoadError = ref('')
+const roleLoadError = ref('')
+const auditLoading = ref(false)
+const auditError = ref('')
 const saving = ref(false)
+const actingUserId = ref<number | null>(null)
+const actingRoleId = ref<number | null>(null)
 const userDialog = ref(false)
 const roleDialog = ref(false)
 const auditDrawer = ref(false)
@@ -31,6 +37,9 @@ const editingRole = ref<AccessRole | null>(null)
 
 const userForm = reactive({ username: '', email: '', password: '', roleCodes: [] as string[] })
 const roleForm = reactive({ code: '', name: '', description: '', permissionCodes: [] as string[] })
+let userRequestId = 0
+let roleRequestId = 0
+let auditRequestId = 0
 
 const canManageUsers = computed(() => auth.can('system:user_manage'))
 const canManageRoles = computed(() => auth.can('system:rbac_manage'))
@@ -57,29 +66,57 @@ function roleName(code: string) {
 }
 
 async function loadUsers(nextPage = userPage.value) {
+  const currentRequest = ++userRequestId
   loadingUsers.value = true
+  userLoadError.value = ''
   userPage.value = nextPage
   try {
     const result = await accessApi.listUsers(nextPage, keyword.value.trim(), roleFilter.value, enabledFilter.value)
+    if (currentRequest !== userRequestId) return
+    const lastPage = Math.max(1, Math.ceil(result.total / 20))
+    if (result.total > 0 && nextPage > lastPage) {
+      await loadUsers(lastPage)
+      return
+    }
     users.value = result.items
     userTotal.value = result.total
   } catch (error) {
-    ElMessage.error(errorMessage(error, '用户列表加载失败'))
+    if (currentRequest !== userRequestId) return
+    users.value = []
+    userTotal.value = 0
+    userLoadError.value = errorMessage(error, '用户列表加载失败')
   } finally {
-    loadingUsers.value = false
+    if (currentRequest === userRequestId) loadingUsers.value = false
   }
 }
 
 async function loadRoles() {
+  const currentRequest = ++roleRequestId
   loadingRoles.value = true
+  roleLoadError.value = ''
   try {
-    roles.value = await accessApi.listRoles()
-    if (canManageRoles.value) permissions.value = await accessApi.listPermissions()
+    const [roleItems, permissionItems] = await Promise.all([
+      accessApi.listRoles(),
+      canManageRoles.value ? accessApi.listPermissions() : Promise.resolve([]),
+    ])
+    if (currentRequest !== roleRequestId) return
+    roles.value = roleItems
+    permissions.value = permissionItems
   } catch (error) {
-    ElMessage.error(errorMessage(error, '角色信息加载失败'))
+    if (currentRequest !== roleRequestId) return
+    roles.value = []
+    permissions.value = []
+    roleLoadError.value = errorMessage(error, '角色信息加载失败')
   } finally {
-    loadingRoles.value = false
+    if (currentRequest === roleRequestId) loadingRoles.value = false
   }
+}
+
+function resetUserFilters() {
+  keyword.value = ''
+  roleFilter.value = ''
+  enabledFilter.value = ''
+  void loadUsers(1)
 }
 
 function openCreateUser() {
@@ -116,16 +153,20 @@ async function saveUser() {
 }
 
 async function toggleUser(user: ManagedUser) {
+  if (actingUserId.value !== null) return
   const action = user.enabled ? '停用' : '启用'
   try {
     await ElMessageBox.confirm(`确认${action}用户“${user.username}”？`, `${action}用户`, {
       type: user.enabled ? 'warning' : 'info', confirmButtonText: `确认${action}`, cancelButtonText: '取消',
     })
+    actingUserId.value = user.id
     await accessApi.changeUserEnabled(user.id, !user.enabled)
     ElMessage.success(`用户已${action}`)
     await loadUsers()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(errorMessage(error, `${action}失败`))
+  } finally {
+    actingUserId.value = null
   }
 }
 
@@ -166,36 +207,51 @@ async function saveRole() {
 }
 
 async function toggleRole(role: AccessRole) {
+  if (actingRoleId.value !== null) return
   const action = role.enabled ? '停用' : '启用'
   try {
     await ElMessageBox.confirm(`确认${action}角色“${role.name}”？`, `${action}角色`, {
       type: role.enabled ? 'warning' : 'info', confirmButtonText: `确认${action}`, cancelButtonText: '取消',
     })
+    actingRoleId.value = role.id
     await accessApi.changeRoleEnabled(role.id, !role.enabled)
     ElMessage.success(`角色已${action}`)
     await loadRoles()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(errorMessage(error, `${action}失败`))
+  } finally {
+    actingRoleId.value = null
   }
 }
 
 async function openAudits() {
   auditDrawer.value = true
-  auditPage.value = 1
-  try {
-    const result = await accessApi.listAudits(1)
-    audits.value = result.items
-    auditTotal.value = result.total
-  } catch (error) {
-    ElMessage.error(errorMessage(error, '审计记录加载失败'))
-  }
+  await loadAuditPage(1)
 }
 
 async function loadAuditPage(page: number) {
+  const currentRequest = ++auditRequestId
+  auditLoading.value = true
+  auditError.value = ''
   auditPage.value = page
-  const result = await accessApi.listAudits(page)
-  audits.value = result.items
-  auditTotal.value = result.total
+  try {
+    const result = await accessApi.listAudits(page)
+    if (currentRequest !== auditRequestId) return
+    const lastPage = Math.max(1, Math.ceil(result.total / 30))
+    if (result.total > 0 && page > lastPage) {
+      await loadAuditPage(lastPage)
+      return
+    }
+    audits.value = result.items
+    auditTotal.value = result.total
+  } catch (error) {
+    if (currentRequest !== auditRequestId) return
+    audits.value = []
+    auditTotal.value = 0
+    auditError.value = errorMessage(error, '审计记录加载失败')
+  } finally {
+    if (currentRequest === auditRequestId) auditLoading.value = false
+  }
 }
 
 const actionLabels: Record<string, string> = {
@@ -219,14 +275,17 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div v-if="roleLoadError" class="catalog-feedback catalog-feedback--error" role="alert">{{ roleLoadError }} <button type="button" class="text-link" :disabled="loadingRoles" @click="loadRoles">重试</button></div>
+
     <el-tabs v-model="activeTab" class="access-tabs">
       <el-tab-pane label="用户管理" name="users">
         <div class="catalog-toolbar access-toolbar">
-          <el-input v-model="keyword" placeholder="搜索用户名或邮箱" clearable @keyup.enter="loadUsers(1)" @clear="loadUsers(1)"><template #prefix><Search :size="16" /></template></el-input>
-          <el-select v-model="roleFilter" placeholder="全部角色" clearable @change="loadUsers(1)"><el-option label="全部角色" value="" /><el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.code" /></el-select>
-          <el-select v-model="enabledFilter" placeholder="全部状态" @change="loadUsers(1)"><el-option label="全部状态" value="" /><el-option label="已启用" :value="true" /><el-option label="已停用" :value="false" /></el-select>
-          <button type="button" class="outline-button" @click="loadUsers(1)"><Search :size="16" />筛选</button>
-          <button type="button" class="icon-button catalog-refresh" title="刷新" @click="loadUsers()"><RefreshCw :size="17" /></button>
+          <el-input v-model="keyword" placeholder="搜索用户名或邮箱" clearable aria-label="搜索后台用户" :disabled="loadingUsers" @keyup.enter="loadUsers(1)" @clear="loadUsers(1)"><template #prefix><Search :size="16" /></template></el-input>
+          <el-select v-model="roleFilter" placeholder="全部角色" clearable aria-label="筛选用户角色" :disabled="loadingUsers" @change="loadUsers(1)"><el-option label="全部角色" value="" /><el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.code" /></el-select>
+          <el-select v-model="enabledFilter" placeholder="全部状态" aria-label="筛选用户状态" :disabled="loadingUsers" @change="loadUsers(1)"><el-option label="全部状态" value="" /><el-option label="已启用" :value="true" /><el-option label="已停用" :value="false" /></el-select>
+          <button type="button" class="outline-button" :disabled="loadingUsers" @click="loadUsers(1)"><Search :size="16" />筛选</button>
+          <button v-if="keyword || roleFilter || enabledFilter !== ''" type="button" class="text-link" :disabled="loadingUsers" @click="resetUserFilters">重置</button>
+          <button type="button" class="icon-button catalog-refresh" title="刷新" aria-label="刷新用户列表" :disabled="loadingUsers" @click="loadUsers()"><RefreshCw :size="17" :class="{ spinning: loadingUsers }" /></button>
           <button v-if="canManageUsers" type="button" class="primary-button access-create" @click="openCreateUser"><UserPlus :size="16" />新建用户</button>
         </div>
 
@@ -241,32 +300,35 @@ onMounted(async () => {
                 <td><span class="catalog-status" :class="user.enabled ? 'catalog-status--active' : 'catalog-status--inactive'">{{ user.enabled ? '已启用' : '已停用' }}</span></td>
                 <td class="catalog-muted">{{ formatTime(user.createdAt) }}</td>
                 <td><div class="order-actions">
-                  <button v-if="canManageUsers" type="button" class="icon-button catalog-edit" title="分配角色" :disabled="user.id === auth.user?.id" @click="openUserRoles(user)"><Edit3 :size="16" /></button>
-                  <el-switch v-if="canManageUsers" :model-value="user.enabled" :disabled="user.id === auth.user?.id" :before-change="() => { void toggleUser(user); return false }" />
+                  <button v-if="canManageUsers" type="button" class="icon-button catalog-edit" title="分配角色" aria-label="分配用户角色" :disabled="user.id === auth.user?.id || actingUserId !== null" @click="openUserRoles(user)"><Edit3 :size="16" /></button>
+                  <el-switch v-if="canManageUsers" :model-value="user.enabled" :aria-label="`${user.enabled ? '停用' : '启用'}用户 ${user.username}`" :disabled="user.id === auth.user?.id || actingUserId !== null" :loading="actingUserId === user.id" :before-change="() => { void toggleUser(user); return false }" />
                 </div></td>
               </tr>
             </tbody>
           </table>
-          <div v-if="loadingUsers" class="catalog-feedback">正在加载用户...</div>
-          <div v-else-if="!users.length" class="catalog-feedback">没有匹配的用户</div>
+          <div v-if="loadingUsers" class="catalog-feedback" role="status">正在加载用户...</div>
+          <div v-else-if="userLoadError" class="catalog-feedback catalog-feedback--error" role="alert">{{ userLoadError }} <button type="button" class="text-link" @click="loadUsers()">重试</button></div>
+          <div v-else-if="!users.length" class="catalog-feedback">{{ keyword || roleFilter || enabledFilter !== '' ? '没有匹配的用户' : '暂无后台用户' }}</div>
         </div>
         <el-pagination v-if="userTotal > 20" class="catalog-pagination" background :current-page="userPage" :page-size="20" :total="userTotal" layout="prev, pager, next, total" @current-change="loadUsers" />
       </el-tab-pane>
 
       <el-tab-pane v-if="canManageRoles" label="角色管理" name="roles">
-        <div class="access-role-head"><span>共 {{ roles.length }} 个角色，权限变更立即影响下一次接口请求</span><button type="button" class="primary-button access-create" @click="openCreateRole"><Plus :size="16" />新建角色</button></div>
+        <div class="access-role-head"><span>共 {{ roles.length }} 个角色，权限变更立即影响下一次接口请求</span><button type="button" class="primary-button access-create" :disabled="loadingRoles || Boolean(roleLoadError)" @click="openCreateRole"><Plus :size="16" />新建角色</button></div>
         <div class="role-grid">
           <article v-for="role in roles" :key="role.id" class="role-card" :class="{ 'role-card--disabled': !role.enabled }">
             <header><span class="role-card__icon"><ShieldCheck :size="19" /></span><div><h3>{{ role.name }}</h3><code>{{ role.code }}</code></div><span v-if="role.builtIn" class="demo-badge demo-badge--muted">内置</span></header>
             <p>{{ role.description || '暂无角色说明' }}</p>
             <div class="role-card__stats"><span><strong>{{ role.permissions.length }}</strong> 项权限</span><span :class="role.enabled ? 'text-green' : 'text-muted'">{{ role.enabled ? '启用中' : '已停用' }}</span></div>
-            <footer><button type="button" class="outline-button" @click="openEditRole(role)"><Edit3 :size="15" />编辑配置</button><el-switch :model-value="role.enabled" :disabled="role.code === 'ADMIN'" :before-change="() => { void toggleRole(role); return false }" /></footer>
+            <footer><button type="button" class="outline-button" :disabled="actingRoleId !== null" @click="openEditRole(role)"><Edit3 :size="15" />编辑配置</button><el-switch :model-value="role.enabled" :aria-label="`${role.enabled ? '停用' : '启用'}角色 ${role.name}`" :disabled="role.code === 'ADMIN' || actingRoleId !== null" :loading="actingRoleId === role.id" :before-change="() => { void toggleRole(role); return false }" /></footer>
           </article>
+          <div v-if="loadingRoles" class="catalog-feedback" role="status">正在加载角色...</div>
+          <div v-else-if="!roles.length && !roleLoadError" class="catalog-feedback">暂无角色</div>
         </div>
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="userDialog" :title="editingUser ? '分配用户角色' : '新建后台用户'" width="min(520px, 94vw)" :close-on-click-modal="!saving">
+    <el-dialog v-model="userDialog" :title="editingUser ? '分配用户角色' : '新建后台用户'" width="min(520px, 94vw)" :close-on-click-modal="!saving" :show-close="!saving">
       <el-form class="catalog-form access-form" label-position="top">
         <div v-if="!editingUser" class="catalog-form__row"><el-form-item label="用户名"><el-input v-model="userForm.username" maxlength="32" /></el-form-item><el-form-item label="邮箱"><el-input v-model="userForm.email" maxlength="128" /></el-form-item></div>
         <el-form-item v-if="!editingUser" label="初始密码"><el-input v-model="userForm.password" type="password" show-password maxlength="64" placeholder="至少 8 位，包含字母和数字" /></el-form-item>
@@ -275,7 +337,7 @@ onMounted(async () => {
       </el-form>
     </el-dialog>
 
-    <el-dialog v-model="roleDialog" :title="editingRole ? '编辑角色' : '新建角色'" width="min(760px, 96vw)" :close-on-click-modal="!saving">
+    <el-dialog v-model="roleDialog" :title="editingRole ? '编辑角色' : '新建角色'" width="min(760px, 96vw)" :close-on-click-modal="!saving" :show-close="!saving">
       <el-form class="catalog-form access-form" label-position="top">
         <div class="catalog-form__row"><el-form-item label="角色编码"><el-input v-model="roleForm.code" :disabled="Boolean(editingRole)" maxlength="64" placeholder="例如 CONTENT_REVIEWER" /></el-form-item><el-form-item label="角色名称"><el-input v-model="roleForm.name" maxlength="64" /></el-form-item></div>
         <el-form-item label="角色说明"><el-input v-model="roleForm.description" maxlength="300" /></el-form-item>
@@ -285,7 +347,9 @@ onMounted(async () => {
     </el-dialog>
 
     <el-drawer v-model="auditDrawer" title="权限操作审计" size="min(620px, 96vw)" class="order-detail-drawer">
-      <div class="audit-list"><article v-for="audit in audits" :key="audit.id" class="audit-item"><span class="audit-item__icon"><BookOpen :size="16" /></span><div><header><strong>{{ actionLabels[audit.action] || audit.action }}</strong><time>{{ formatTime(audit.createdAt) }}</time></header><p><b>{{ audit.operatorName }}</b> 操作 {{ audit.targetType === 'USER' ? '用户' : '角色' }}“{{ audit.targetName }}”</p><small v-if="audit.beforeValue || audit.afterValue">{{ audit.beforeValue || '空' }} → {{ audit.afterValue || '空' }}</small></div></article><p v-if="!audits.length" class="catalog-feedback">暂无审计记录</p></div>
+      <div v-if="auditLoading" class="catalog-feedback" role="status">正在加载审计记录...</div>
+      <div v-else-if="auditError" class="catalog-feedback catalog-feedback--error" role="alert">{{ auditError }} <button type="button" class="text-link" @click="loadAuditPage(auditPage)">重试</button></div>
+      <div v-else class="audit-list"><article v-for="audit in audits" :key="audit.id" class="audit-item"><span class="audit-item__icon"><BookOpen :size="16" /></span><div><header><strong>{{ actionLabels[audit.action] || audit.action }}</strong><time>{{ formatTime(audit.createdAt) }}</time></header><p><b>{{ audit.operatorName }}</b> 操作 {{ audit.targetType === 'USER' ? '用户' : '角色' }}“{{ audit.targetName }}”</p><small v-if="audit.beforeValue || audit.afterValue">{{ audit.beforeValue || '空' }} → {{ audit.afterValue || '空' }}</small></div></article><p v-if="!audits.length" class="catalog-feedback">暂无审计记录</p></div>
       <el-pagination v-if="auditTotal > 30" class="catalog-pagination" background :current-page="auditPage" :page-size="30" :total="auditTotal" layout="prev, pager, next" @current-change="loadAuditPage" />
     </el-drawer>
   </div>

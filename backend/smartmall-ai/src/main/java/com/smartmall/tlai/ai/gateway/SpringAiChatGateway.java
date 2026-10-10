@@ -65,7 +65,7 @@ public class SpringAiChatGateway implements AiChatGateway {
         } catch (RuntimeException exception) {
             long latencyMs = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
             // 不记录请求消息和 API Key，只保留定位供应商调用所需的安全元数据。
-            log.error("AI provider call failed: configId={}, provider={}, model={}, endpoint={}, latencyMs={}",
+            log.error("AI 供应商接口调用失败：配置ID={}，供应商={}，模型={}，接口地址={}，耗时毫秒={}",
                     config.id(), config.provider(), config.modelName(), config.baseUrl(), latencyMs, exception);
             throw new BusinessException(ErrorCode.AI_PROVIDER_ERROR,
                     "AI 服务调用失败，请检查接口地址、模型名称和密钥");

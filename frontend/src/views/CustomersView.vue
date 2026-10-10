@@ -43,6 +43,11 @@ async function loadPage(nextPage = page.value) {
   try {
     const result = await customerApi.list(nextPage, keyword.value.trim())
     if (current !== requestId) return
+    const lastPage = Math.max(1, Math.ceil(result.total / 20))
+    if (result.total > 0 && nextPage > lastPage) {
+      await loadPage(lastPage)
+      return
+    }
     rows.value = result.items
     total.value = result.total
   } catch (error) {
@@ -100,11 +105,11 @@ onMounted(() => { void loadPage(1) })
     </div>
 
     <div class="catalog-toolbar">
-      <el-input v-model="keyword" placeholder="搜索姓名、电话或邮箱" clearable aria-label="搜索客户" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
+      <el-input v-model="keyword" placeholder="搜索姓名、电话或邮箱" clearable aria-label="搜索客户" :disabled="loading" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
         <template #prefix><Search :size="16" /></template>
       </el-input>
-      <button type="button" class="outline-button" @click="loadPage(1)"><Search :size="16" />搜索</button>
-      <button type="button" class="icon-button catalog-refresh" title="刷新列表" aria-label="刷新列表" @click="loadPage()"><RefreshCw :size="17" /></button>
+      <button type="button" class="outline-button" :disabled="loading" @click="loadPage(1)"><Search :size="16" />搜索</button>
+      <button type="button" class="icon-button catalog-refresh" title="刷新列表" aria-label="刷新列表" :disabled="loading" @click="loadPage()"><RefreshCw :size="17" :class="{ spinning: loading }" /></button>
       <span class="catalog-count">共 {{ total }} 位客户</span>
     </div>
 

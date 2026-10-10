@@ -37,7 +37,7 @@ public class AdminBootstrapInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         if (!properties.enabled()) return;
         if (userAccountService.hasAdmin()) {
-            log.info("Bootstrap administrator already exists; initialization skipped");
+            log.info("初始化管理员已存在，跳过创建");
             return;
         }
         BootstrapAdminInput input = new BootstrapAdminInput(
@@ -49,7 +49,7 @@ public class AdminBootstrapInitializer implements ApplicationRunner {
             throw new IllegalStateException("Invalid bootstrap administrator configuration: " + message);
         }
         userAccountService.createUser(input.username(), input.email(), input.password(), BuiltInRoleCodes.ADMIN);
-        log.info("Bootstrap administrator created: {}", input.username());
+        log.info("初始化管理员创建成功：用户名={}", input.username());
     }
 
     private record BootstrapAdminInput(

@@ -43,7 +43,7 @@ public class RedisAnalyticsResultCache implements AnalyticsResultCache {
             return Optional.of(new AnalyticsResult(query, payload.points(), payload.generatedAt(), true));
         } catch (DataAccessException | JsonProcessingException exception) {
             // 缓存故障只能降低性能，不能阻断真实数据查询。
-            log.warn("Analytics cache read failed, falling back to PostgreSQL: type={}",
+            log.warn("数据分析缓存读取失败，将改用 PostgreSQL 查询：分析类型={}",
                     exception.getClass().getSimpleName());
             return Optional.empty();
         }
@@ -56,7 +56,7 @@ public class RedisAnalyticsResultCache implements AnalyticsResultCache {
                     new CachePayload(result.points(), result.generatedAt()));
             redisTemplate.opsForValue().set(key(result.query()), value, ttl);
         } catch (DataAccessException | JsonProcessingException exception) {
-            log.warn("Analytics cache write failed, result will not be cached: type={}",
+            log.warn("数据分析缓存写入失败，本次结果不会缓存：分析类型={}",
                     exception.getClass().getSimpleName());
         }
     }

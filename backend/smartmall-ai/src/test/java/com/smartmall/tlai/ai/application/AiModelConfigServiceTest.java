@@ -33,6 +33,7 @@ class AiModelConfigServiceTest {
     @Mock AiModelConfigRepository repository;
     @Mock AiChatGateway gateway;
     @Mock AiEmbeddingGateway embeddingGateway;
+    @Mock AiCallLogService callLogService;
     private AiModelConfigService service;
     private AiCredentialCipher credentialCipher;
 
@@ -41,7 +42,8 @@ class AiModelConfigServiceTest {
         AiProperties properties = new AiProperties(
                 Base64.getEncoder().encodeToString(new byte[32]), Duration.ofSeconds(10));
         credentialCipher = new AiCredentialCipher(properties);
-        service = new AiModelConfigService(repository, gateway, embeddingGateway, properties, credentialCipher);
+        service = new AiModelConfigService(repository, gateway, embeddingGateway, properties, credentialCipher,
+                callLogService);
     }
 
     @Test

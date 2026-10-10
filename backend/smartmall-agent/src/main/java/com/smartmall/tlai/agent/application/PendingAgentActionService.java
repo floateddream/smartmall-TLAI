@@ -71,7 +71,7 @@ public class PendingAgentActionService {
         repository.insert(new AgentActionConfirmation(null, hashToken(token), user.userId(), user.username(),
                 actionName, toJson(normalized.arguments()), AgentActionStatus.PENDING,
                 now.plus(CONFIRMATION_TTL), null, now, null));
-        log.info("Agent action awaiting confirmation: action={}, userId={}, expiresAt={}",
+        log.info("Agent 操作等待用户确认：操作={}，用户ID={}，过期时间={}",
                 actionName, user.userId(), now.plus(CONFIRMATION_TTL));
         return new AgentPendingAction(token, actionName, definition.displayName(),
                 normalized.summary(), now.plus(CONFIRMATION_TTL));
@@ -110,7 +110,7 @@ public class PendingAgentActionService {
             long latencyMs = elapsedMs(startedAt);
             safeAudit(user, confirmation.actionName(), confirmation.argumentsJson(),
                     "SUCCESS", latencyMs, null);
-            log.info("Agent action succeeded: action={}, userId={}, latencyMs={}",
+            log.info("Agent 操作执行成功：操作={}，用户ID={}，耗时毫秒={}",
                     confirmation.actionName(), user.userId(), latencyMs);
             return new AgentActionExecution(confirmation.actionName(), definition.displayName(), summary,
                     AgentActionStatus.SUCCEEDED, latencyMs);
@@ -120,7 +120,7 @@ public class PendingAgentActionService {
                     ? business.getErrorCode().code() : ErrorCode.INTERNAL_ERROR.code();
             safeAudit(user, confirmation.actionName(), confirmation.argumentsJson(),
                     "FAILED", latencyMs, errorCode);
-            log.warn("Agent action failed: action={}, userId={}, errorCode={}",
+            log.warn("Agent 操作执行失败：操作={}，用户ID={}，错误码={}",
                     confirmation.actionName(), user.userId(), errorCode);
             throw exception;
         }
@@ -143,7 +143,7 @@ public class PendingAgentActionService {
         if (!repository.cancel(confirmation.id(), user.userId())) {
             throw new BusinessException(ErrorCode.AGENT_ACTION_IN_PROGRESS);
         }
-        log.info("Agent action cancelled: action={}, userId={}", confirmation.actionName(), user.userId());
+        log.info("Agent 操作已取消：操作={}，用户ID={}", confirmation.actionName(), user.userId());
         return cancelledResult(confirmation, definition);
     }
 
@@ -320,7 +320,7 @@ public class PendingAgentActionService {
         try {
             auditService.record(user, actionName, argumentsJson, status, latencyMs, errorCode);
         } catch (RuntimeException exception) {
-            log.error("Agent action audit could not be persisted: action={}, userId={}",
+            log.error("Agent 操作审计记录保存失败：操作={}，用户ID={}",
                     actionName, user.userId(), exception);
         }
     }

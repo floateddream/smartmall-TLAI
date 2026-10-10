@@ -25,7 +25,7 @@ Embedding test / knowledge indexing
   -> POST {baseUrl}/embeddings
 ```
 
-文档上传后会使用活动的 Embedding 模型生成向量并写入 `knowledge_chunk`。AI 助手开启“知识库增强”后，会把用户问题也转换为向量，检索最相似的文档片段，再由对话模型基于片段生成带来源的回答。业务工具调用和对话持久化仍未实现。
+文档上传后会使用活动的 Embedding 模型生成向量并写入 `knowledge_chunk`。AI 助手会根据用户意图选择通用问答、知识库检索或受控业务工具，并把会话、消息和多轮参数状态持久化。详细流程见《AI助手会话持久化与SSE说明.md》和《只读Agent工具调用说明.md》。
 
 ## 2. 模块职责
 

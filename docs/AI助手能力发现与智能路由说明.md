@@ -44,6 +44,8 @@ AI 回答还可以返回 `suggestions`，前端在消息下方显示轻量按钮
 
 阶段 7.5 已增加 `CLARIFY` 和 `UNSUPPORTED` 路由。缺少参数、表达含糊或请求未开放操作时，接口仍返回 HTTP 200，并通过 `responseType`、`missingFields` 和 `suggestions` 返回可读的中文引导。
 
+阶段 7 收尾已补充会话持久化、SSE 渐进输出、多轮参数状态和 Agent 审计页面，数据库表、事件协议与验证方式见《AI助手会话持久化与SSE说明.md》。
+
 `responseType` 可能为：
 
 - `ANSWER`：普通回答。

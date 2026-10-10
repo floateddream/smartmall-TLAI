@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleAlert, CircleCheck, Database, Download, File, FileText, FileType2,
@@ -9,6 +10,7 @@ import { ApiError } from '@/api/client'
 import { knowledgeApi } from '@/api/knowledge'
 import type { KnowledgeDocument, KnowledgeDocumentStatus } from '@/api/knowledge'
 import { useAuthStore } from '@/stores/auth'
+import { readQueryEnum, readQueryText } from '@/utils/routeQuery'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 const MAX_BATCH_FILES = 20
@@ -26,6 +28,7 @@ interface UploadQueueItem {
 }
 
 const auth = useAuthStore()
+const route = useRoute()
 const rows = ref<KnowledgeDocument[]>([])
 const page = ref(1)
 const total = ref(0)
@@ -73,6 +76,11 @@ async function loadPage(nextPage = page.value) {
   try {
     const result = await knowledgeApi.list(nextPage, keyword.value.trim(), status.value)
     if (current !== requestId) return
+    const lastPage = Math.max(1, Math.ceil(result.total / 20))
+    if (result.total > 0 && nextPage > lastPage) {
+      await loadPage(lastPage)
+      return
+    }
     rows.value = result.items
     total.value = result.total
   } catch (error) {
@@ -83,6 +91,12 @@ async function loadPage(nextPage = page.value) {
   } finally {
     if (current === requestId) loading.value = false
   }
+}
+
+function resetFilters() {
+  keyword.value = ''
+  status.value = ''
+  void loadPage(1)
 }
 
 async function pollProcessingStatus() {
@@ -294,6 +308,8 @@ function fileIcon(extension: string) {
 }
 
 onMounted(() => {
+  keyword.value = readQueryText(route.query.keyword)
+  status.value = readQueryEnum(route.query.status, Object.keys(statusLabels) as KnowledgeDocumentStatus[])
   void loadPage(1)
   pollTimer = window.setInterval(() => { void pollProcessingStatus() }, 3000)
 })
@@ -322,15 +338,16 @@ onUnmounted(() => {
     </div>
 
     <div class="catalog-toolbar knowledge-toolbar">
-      <el-input v-model="keyword" placeholder="搜索文档名称" clearable aria-label="搜索文档" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
+      <el-input v-model="keyword" placeholder="搜索文档名称" clearable aria-label="搜索文档" :disabled="loading" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
         <template #prefix><Search :size="16" /></template>
       </el-input>
-      <el-select v-model="status" class="knowledge-status-filter" aria-label="文档状态" @change="loadPage(1)">
+      <el-select v-model="status" class="knowledge-status-filter" aria-label="文档状态" :disabled="loading" @change="loadPage(1)">
         <el-option label="全部状态" value="" />
         <el-option v-for="(label, value) in statusLabels" :key="value" :label="label" :value="value" />
       </el-select>
-      <button type="button" class="outline-button" @click="loadPage(1)"><Search :size="16" />搜索</button>
-      <button type="button" class="icon-button" title="刷新列表" aria-label="刷新列表" @click="loadPage()"><RefreshCw :size="17" :class="{ spin: loading }" /></button>
+      <button type="button" class="outline-button" :disabled="loading" @click="loadPage(1)"><Search :size="16" />搜索</button>
+      <button v-if="keyword || status" type="button" class="text-link" :disabled="loading" @click="resetFilters">重置</button>
+      <button type="button" class="icon-button" title="刷新列表" aria-label="刷新列表" :disabled="loading" @click="loadPage()"><RefreshCw :size="17" :class="{ spin: loading }" /></button>
     </div>
 
     <div class="catalog-table-wrap knowledge-table-wrap">

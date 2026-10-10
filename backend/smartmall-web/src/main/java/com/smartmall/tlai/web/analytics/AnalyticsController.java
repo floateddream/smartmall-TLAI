@@ -98,7 +98,7 @@ public class AnalyticsController {
             auditService.recordSuccess(principal.id(), principal.username(), mode, question,
                     result, modelName, latencyMs);
         } catch (RuntimeException exception) {
-            log.error("Analytics success audit could not be persisted: mode={}, userId={}",
+            log.error("数据分析成功审计记录保存失败：分析模式={}，用户ID={}",
                     mode, principal.id(), exception);
         }
     }
@@ -111,7 +111,7 @@ public class AnalyticsController {
             auditService.recordFailure(principal.id(), principal.username(), mode, question,
                     query, errorCode, latencyMs);
         } catch (RuntimeException auditException) {
-            log.error("Analytics failure audit could not be persisted: mode={}, userId={}",
+            log.error("数据分析失败审计记录保存失败：分析模式={}，用户ID={}",
                     mode, principal.id(), auditException);
         }
     }

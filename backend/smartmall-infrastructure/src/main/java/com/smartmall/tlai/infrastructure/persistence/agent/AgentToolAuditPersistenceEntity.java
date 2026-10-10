@@ -17,6 +17,8 @@ public class AgentToolAuditPersistenceEntity {
     private String status;
     private Long latencyMs;
     private String errorCode;
+    private String traceId;
+    private Long conversationId;
     private OffsetDateTime createdAt;
 
     public Long getId() { return id; }
@@ -35,6 +37,10 @@ public class AgentToolAuditPersistenceEntity {
     public void setLatencyMs(Long latencyMs) { this.latencyMs = latencyMs; }
     public String getErrorCode() { return errorCode; }
     public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
+    public String getTraceId() { return traceId; }
+    public void setTraceId(String traceId) { this.traceId = traceId; }
+    public Long getConversationId() { return conversationId; }
+    public void setConversationId(Long conversationId) { this.conversationId = conversationId; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
 }

@@ -14,8 +14,10 @@ import {
 const models = ref<AiModelConfig[]>([])
 const providers = ref<AiProviderOption[]>([])
 const loading = ref(false)
+const loadError = ref('')
 const saving = ref(false)
 const testingId = ref<number | null>(null)
+const actingId = ref<number | null>(null)
 const dialogOpen = ref(false)
 const editing = ref<AiModelConfig | null>(null)
 const form = reactive<AiModelConfigInput>({
@@ -39,6 +41,7 @@ const modelOptions = computed(() => form.modelType === 'EMBEDDING'
   ? selectedProvider.value?.embeddingModels ?? []
   : selectedProvider.value?.chatModels ?? [])
 const credentialRequired = computed(() => selectedProvider.value?.credentialRequired ?? true)
+let modelRequestId = 0
 
 function reportError(action: string, error: unknown) {
   console.error(`[AI模型配置] ${action}失败`, error)
@@ -46,13 +49,18 @@ function reportError(action: string, error: unknown) {
 }
 
 async function loadModels() {
+  const currentRequest = ++modelRequestId
   loading.value = true
+  loadError.value = ''
   try {
-    models.value = await aiApi.listModels()
+    const response = await aiApi.listModels()
+    if (currentRequest === modelRequestId) models.value = response
   } catch (error) {
-    reportError('加载模型列表', error)
+    if (currentRequest !== modelRequestId) return
+    models.value = []
+    loadError.value = error instanceof Error ? error.message : '模型列表加载失败'
   } finally {
-    loading.value = false
+    if (currentRequest === modelRequestId) loading.value = false
   }
 }
 
@@ -60,8 +68,12 @@ async function loadProviders() {
   try {
     providers.value = await aiApi.listProviders()
   } catch (error) {
-    reportError('加载供应商列表', error)
+    loadError.value = error instanceof Error ? error.message : '供应商列表加载失败'
   }
+}
+
+async function reload() {
+  await Promise.all([loadProviders(), loadModels()])
 }
 
 function applyProvider(providerCode: AiProviderCode) {
@@ -152,6 +164,8 @@ async function save() {
 }
 
 async function activate(model: AiModelConfig) {
+  if (actingId.value !== null) return
+  actingId.value = model.id
   console.info('[AI模型配置] 开始激活模型', { id: model.id, provider: model.provider, model: model.modelName })
   try {
     await aiApi.activateModel(model.id)
@@ -159,10 +173,14 @@ async function activate(model: AiModelConfig) {
     await loadModels()
   } catch (error) {
     reportError('激活模型', error)
+  } finally {
+    actingId.value = null
   }
 }
 
 async function toggleEnabled(model: AiModelConfig) {
+  if (actingId.value !== null) return
+  actingId.value = model.id
   console.info('[AI模型配置] 开始切换启停状态', { id: model.id, enabled: !model.enabled })
   try {
     await aiApi.changeModelEnabled(model.id, !model.enabled)
@@ -170,10 +188,13 @@ async function toggleEnabled(model: AiModelConfig) {
     await loadModels()
   } catch (error) {
     reportError(model.enabled ? '停用模型' : '启用模型', error)
+  } finally {
+    actingId.value = null
   }
 }
 
 async function test(model: AiModelConfig) {
+  if (testingId.value !== null) return
   testingId.value = model.id
   console.info('[AI模型配置] 开始测试连接', { id: model.id, provider: model.provider, model: model.modelName })
   try {
@@ -187,7 +208,7 @@ async function test(model: AiModelConfig) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadProviders(), loadModels()])
+  await reload()
 })
 </script>
 
@@ -203,7 +224,7 @@ onMounted(async () => {
         <span class="demo-badge" :class="credentialCount > 0 ? 'demo-badge--success' : 'demo-badge--warning'">
           <KeyRound :size="14" />已配置 {{ credentialCount }} 个密钥
         </span>
-        <button type="button" class="primary-button" @click="openCreate"><Plus :size="16" />新增模型</button>
+        <button type="button" class="primary-button" :disabled="loading || Boolean(loadError)" @click="openCreate"><Plus :size="16" />新增模型</button>
       </div>
     </div>
 
@@ -214,7 +235,9 @@ onMounted(async () => {
       <Radio :size="22" :class="{ 'runtime-pulse': activeChatModel || activeEmbeddingModel }" />
     </section>
 
-    <div v-loading="loading" class="model-grid">
+    <div v-if="loadError" class="catalog-feedback catalog-feedback--error model-load-error" role="alert">{{ loadError }} <button type="button" class="text-link" :disabled="loading" @click="reload">重试</button></div>
+
+    <div v-else v-loading="loading" class="model-grid">
       <article v-for="model in models" :key="model.id" class="model-card" :class="{ 'model-card--active': model.active, 'model-card--disabled': !model.enabled }">
         <header>
           <span class="model-card__icon"><ServerCog :size="20" /></span>
@@ -231,11 +254,11 @@ onMounted(async () => {
           <div v-else><dt>向量维度</dt><dd>{{ model.embeddingDimensions }}</dd></div>
         </dl>
         <footer>
-          <button type="button" class="icon-button" title="编辑配置" aria-label="编辑配置" @click="openEdit(model)"><Edit3 :size="16" /></button>
-          <span :title="!model.credentialRequired || model.credentialConfigured ? '测试连接' : '请先编辑并配置 API Key'"><button type="button" class="icon-button" aria-label="测试连接" :disabled="testingId === model.id || (model.credentialRequired && !model.credentialConfigured)" @click="test(model)"><RefreshCw v-if="testingId === model.id" :size="16" class="spin" /><TestTube2 v-else :size="16" /></button></span>
-          <button v-if="!model.active" type="button" class="outline-button model-activate" :title="model.credentialRequired && !model.credentialConfigured ? '请先编辑并配置 API Key' : !model.enabled ? '请先启用模型' : '设为当前模型'" :disabled="!model.enabled || (model.credentialRequired && !model.credentialConfigured)" @click="activate(model)"><Check :size="15" />设为当前</button>
+          <button type="button" class="icon-button" title="编辑配置" aria-label="编辑配置" :disabled="actingId !== null || saving" @click="openEdit(model)"><Edit3 :size="16" /></button>
+          <span :title="!model.credentialRequired || model.credentialConfigured ? '测试连接' : '请先编辑并配置 API Key'"><button type="button" class="icon-button" aria-label="测试连接" :disabled="testingId !== null || actingId !== null || (model.credentialRequired && !model.credentialConfigured)" @click="test(model)"><RefreshCw v-if="testingId === model.id" :size="16" class="spin" /><TestTube2 v-else :size="16" /></button></span>
+          <button v-if="!model.active" type="button" class="outline-button model-activate" :title="model.credentialRequired && !model.credentialConfigured ? '请先编辑并配置 API Key' : !model.enabled ? '请先启用模型' : '设为当前模型'" :disabled="actingId !== null || !model.enabled || (model.credentialRequired && !model.credentialConfigured)" @click="activate(model)"><Check :size="15" />{{ actingId === model.id ? '处理中' : '设为当前' }}</button>
           <span v-else class="model-current"><Check :size="14" />使用中</span>
-          <button type="button" class="icon-button" :class="{ 'text-green': model.enabled }" :title="model.enabled ? '停用配置' : '启用配置'" :aria-label="model.enabled ? '停用配置' : '启用配置'" @click="toggleEnabled(model)"><CirclePower :size="16" /></button>
+          <button type="button" class="icon-button" :class="{ 'text-green': model.enabled }" :title="model.enabled ? '停用配置' : '启用配置'" :aria-label="model.enabled ? '停用配置' : '启用配置'" :disabled="actingId !== null || testingId !== null" @click="toggleEnabled(model)"><CirclePower :size="16" /></button>
         </footer>
       </article>
       <div v-if="!loading && models.length === 0" class="model-empty">
@@ -243,7 +266,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <el-dialog v-model="dialogOpen" :title="editing ? '编辑模型配置' : '新增模型配置'" width="min(520px, 94vw)" class="model-dialog">
+    <el-dialog v-model="dialogOpen" :title="editing ? '编辑模型配置' : '新增模型配置'" width="min(520px, 94vw)" class="model-dialog" :close-on-click-modal="!saving" :show-close="!saving">
       <el-form label-position="top">
         <el-form-item label="配置名称"><el-input v-model="form.name" maxlength="80" /></el-form-item>
         <el-form-item label="模型类型">

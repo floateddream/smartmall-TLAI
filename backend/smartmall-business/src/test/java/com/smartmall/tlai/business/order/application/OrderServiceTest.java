@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -116,6 +117,26 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service().pay(11))
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.ORDER_STATUS_INVALID));
+    }
+
+    @Test
+    void payingAlreadyPaidOrderDoesNotRepeatTransition() {
+        when(orderRepository.findById(11)).thenReturn(Optional.of(order(11, OrderStatus.PAID)));
+
+        assertThatThrownBy(() -> service().pay(11))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.ORDER_STATUS_INVALID));
+        verify(orderRepository, never()).markPaid(anyLong(), any(OffsetDateTime.class));
+    }
+
+    @Test
+    void cancellingAlreadyCancelledOrderDoesNotReleaseStockAgain() {
+        when(orderRepository.findById(11)).thenReturn(Optional.of(order(11, OrderStatus.CANCELLED)));
+
+        assertThatThrownBy(() -> service().cancel(11))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.ORDER_STATUS_INVALID));
+        verify(productRepository, never()).releaseStock(anyLong(), anyInt());
     }
 
     private OrderService service() {

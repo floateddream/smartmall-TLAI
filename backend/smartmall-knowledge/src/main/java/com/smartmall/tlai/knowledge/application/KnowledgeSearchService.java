@@ -42,7 +42,7 @@ public class KnowledgeSearchService {
         }
         List<KnowledgeSearchHit> hits = chunkRepository.searchSimilar(
                 vectors.getFirst(), limit, minScore);
-        log.info("Knowledge search completed: hitCount={}, limit={}, minScore={}, latencyMs={}",
+        log.info("知识库检索完成：命中数量={}，返回上限={}，最低相似度={}，耗时毫秒={}",
                 hits.size(), limit, minScore, (System.nanoTime() - startedAt) / 1_000_000);
         return hits;
     }

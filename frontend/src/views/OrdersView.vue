@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Ban, CreditCard, Eye, Plus, RefreshCw, RotateCcw, Search, ShoppingCart, Trash2 } from 'lucide-vue-next'
 import { ApiError } from '@/api/client'
@@ -9,6 +10,7 @@ import { orderApi } from '@/api/orders'
 import type { CreateOrderInput, Order, OrderStatus } from '@/api/orders'
 import { refundApi } from '@/api/refunds'
 import { useAuthStore } from '@/stores/auth'
+import { readPositiveQueryId, readQueryEnum, readQueryText } from '@/utils/routeQuery'
 
 interface DraftItem {
   key: number
@@ -17,6 +19,7 @@ interface DraftItem {
 }
 
 const auth = useAuthStore()
+const route = useRoute()
 const rows = ref<Order[]>([])
 const page = ref(1)
 const total = ref(0)
@@ -33,6 +36,8 @@ const customers = ref<Customer[]>([])
 const products = ref<Product[]>([])
 const detailOpen = ref(false)
 const detailLoading = ref(false)
+const detailError = ref('')
+const detailId = ref<number | null>(null)
 const detail = ref<Order | null>(null)
 const refundOpen = ref(false)
 const refundTarget = ref<Order | null>(null)
@@ -44,6 +49,7 @@ const createForm = reactive<{ customerId: number | null; items: DraftItem[] }>({
 })
 let lineKey = 0
 let requestId = 0
+let detailRequestId = 0
 
 const statuses: Array<{ value: OrderStatus; label: string }> = [
   { value: 'PENDING_PAYMENT', label: '待支付' },
@@ -97,6 +103,11 @@ async function loadPage(nextPage = page.value) {
   try {
     const result = await orderApi.list(nextPage, keyword.value.trim(), statusFilter.value)
     if (current !== requestId) return
+    const lastPage = Math.max(1, Math.ceil(result.total / 20))
+    if (result.total > 0 && nextPage > lastPage) {
+      await loadPage(lastPage)
+      return
+    }
     rows.value = result.items
     total.value = result.total
   } catch (error) {
@@ -107,6 +118,12 @@ async function loadPage(nextPage = page.value) {
   } finally {
     if (current === requestId) loading.value = false
   }
+}
+
+function resetFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+  void loadPage(1)
 }
 
 async function loadOptions() {
@@ -184,16 +201,20 @@ async function createOrder() {
 }
 
 async function openDetail(id: number) {
+  const currentRequest = ++detailRequestId
+  detailId.value = id
   detailOpen.value = true
   detailLoading.value = true
+  detailError.value = ''
   detail.value = null
   try {
-    detail.value = await orderApi.get(id)
+    const response = await orderApi.get(id)
+    if (currentRequest === detailRequestId) detail.value = response
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : '订单详情加载失败')
-    detailOpen.value = false
+    if (currentRequest !== detailRequestId) return
+    detailError.value = error instanceof ApiError ? error.message : '订单详情加载失败'
   } finally {
-    detailLoading.value = false
+    if (currentRequest === detailRequestId) detailLoading.value = false
   }
 }
 
@@ -251,7 +272,13 @@ async function submitRefund() {
   }
 }
 
-onMounted(() => { void loadPage(1) })
+onMounted(() => {
+  keyword.value = readQueryText(route.query.keyword)
+  statusFilter.value = readQueryEnum(route.query.status, statuses.map(item => item.value))
+  const detailId = readPositiveQueryId(route.query.id)
+  void loadPage(1)
+  if (detailId !== null) void openDetail(detailId)
+})
 </script>
 
 <template>
@@ -262,15 +289,16 @@ onMounted(() => { void loadPage(1) })
     </div>
 
     <div class="catalog-toolbar order-toolbar">
-      <el-input v-model="keyword" placeholder="搜索订单号或客户名称" clearable aria-label="搜索订单" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
+      <el-input v-model="keyword" placeholder="搜索订单号或客户名称" clearable aria-label="搜索订单" :disabled="loading" @keyup.enter="loadPage(1)" @clear="loadPage(1)">
         <template #prefix><Search :size="16" /></template>
       </el-input>
-      <el-select v-model="statusFilter" class="order-status-filter" aria-label="筛选订单状态" @change="loadPage(1)">
+      <el-select v-model="statusFilter" class="order-status-filter" aria-label="筛选订单状态" :disabled="loading" @change="loadPage(1)">
         <el-option label="全部状态" value="" />
         <el-option v-for="status in statuses" :key="status.value" :label="status.label" :value="status.value" />
       </el-select>
-      <button type="button" class="outline-button" @click="loadPage(1)"><Search :size="16" />搜索</button>
-      <button type="button" class="icon-button catalog-refresh" title="刷新列表" aria-label="刷新列表" @click="loadPage()"><RefreshCw :size="17" /></button>
+      <button type="button" class="outline-button" :disabled="loading" @click="loadPage(1)"><Search :size="16" />搜索</button>
+      <button v-if="keyword || statusFilter" type="button" class="text-link" :disabled="loading" @click="resetFilters">重置</button>
+      <button type="button" class="icon-button catalog-refresh" title="刷新列表" aria-label="刷新列表" :disabled="loading" @click="loadPage()"><RefreshCw :size="17" :class="{ spinning: loading }" /></button>
       <span class="catalog-count">共 {{ total }} 笔订单</span>
     </div>
 
@@ -330,7 +358,8 @@ onMounted(() => { void loadPage(1) })
     </el-dialog>
 
     <el-drawer v-model="detailOpen" title="订单详情" size="520px" class="order-detail-drawer">
-      <div v-if="detailLoading" class="catalog-feedback">正在加载订单详情...</div>
+      <div v-if="detailLoading" class="catalog-feedback" role="status">正在加载订单详情...</div>
+      <div v-else-if="detailError" class="catalog-feedback catalog-feedback--error" role="alert">{{ detailError }} <button v-if="detailId" type="button" class="text-link" @click="openDetail(detailId)">重试</button></div>
       <div v-else-if="detail" class="order-detail">
         <div class="order-detail__header">
           <div><p class="eyebrow">ORDER RECORD</p><h2 class="mono">{{ detail.orderNo }}</h2></div>

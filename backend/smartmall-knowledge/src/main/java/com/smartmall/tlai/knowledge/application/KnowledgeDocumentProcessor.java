@@ -56,7 +56,7 @@ public class KnowledgeDocumentProcessor {
     }
 
     private void processClaimed(KnowledgeDocument document) {
-        log.info("Knowledge document processing started: id={}, name={}", document.id(), document.originalName());
+        log.info("知识库文档处理开始：文档ID={}，文件名={}", document.id(), document.originalName());
         try {
             StoredObject storedObject = objectStorage.get(document.objectKey());
             String text;
@@ -92,17 +92,17 @@ public class KnowledgeDocumentProcessor {
                         textChunk.content(), textChunk.tokenCount(), vector));
             }
             indexWriter.complete(document.id(), chunks);
-            log.info("Knowledge document processing succeeded: id={}, chunkCount={}",
+            log.info("知识库文档处理成功：文档ID={}，分块数量={}",
                     document.id(), chunks.size());
         } catch (Exception exception) {
             String errorMessage = safeErrorMessage(exception);
-            log.error("Knowledge document processing failed: id={}, name={}, reason={}",
+            log.error("知识库文档处理失败：文档ID={}，文件名={}，失败原因={}",
                     document.id(), document.originalName(), errorMessage, exception);
             try {
                 indexWriter.fail(document.id(), errorMessage);
             } catch (RuntimeException statusFailure) {
                 exception.addSuppressed(statusFailure);
-                log.error("Failed to persist knowledge processing status: id={}", document.id(), statusFailure);
+                log.error("保存知识库文档处理状态失败：文档ID={}", document.id(), statusFailure);
             }
         }
     }

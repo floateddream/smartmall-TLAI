@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 import java.time.OffsetDateTime;
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,6 +81,30 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(command))
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+    }
+
+    @Test
+    void shouldHideDisabledAccountBehindGenericCredentialError() {
+        LoginCommand command = new LoginCommand("disabled_user", "password1");
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new DisabledException("User is disabled"));
+
+        assertThatThrownBy(() -> authService.login(command))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+        verifyNoInteractions(jwtService);
+    }
+
+    @Test
+    void shouldPropagateUnexpectedAuthenticationInfrastructureFailure() {
+        LoginCommand command = new LoginCommand("test_user", "password1");
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new IllegalStateException("identity store unavailable"));
+
+        assertThatThrownBy(() -> authService.login(command))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("identity store unavailable");
+        verifyNoInteractions(jwtService);
     }
 
     private UserAccount user(Long id, String username, String email, String role) {

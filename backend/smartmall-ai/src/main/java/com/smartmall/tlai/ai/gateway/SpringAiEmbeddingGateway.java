@@ -44,7 +44,7 @@ public class SpringAiEmbeddingGateway implements AiEmbeddingGateway {
         } catch (RuntimeException exception) {
             long latencyMs = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
             // 不记录输入文本和凭据，只保留定位远程服务所需的安全元数据。
-            log.error("AI embedding call failed: configId={}, provider={}, model={}, endpoint={}, latencyMs={}",
+            log.error("AI 向量模型调用失败：配置ID={}，供应商={}，模型={}，接口地址={}，耗时毫秒={}",
                     config.id(), config.provider(), config.modelName(), config.baseUrl(), latencyMs, exception);
             throw new BusinessException(ErrorCode.AI_PROVIDER_ERROR,
                     "Embedding 服务调用失败，请检查接口地址、模型名称和服务状态");

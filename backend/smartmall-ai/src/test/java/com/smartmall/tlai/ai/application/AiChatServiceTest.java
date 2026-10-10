@@ -4,6 +4,9 @@ import com.smartmall.tlai.ai.config.AiProperties;
 import com.smartmall.tlai.ai.gateway.AiChatGateway;
 import com.smartmall.tlai.ai.model.AiChatMessage;
 import com.smartmall.tlai.ai.model.AiChatResult;
+import com.smartmall.tlai.ai.model.AiCallScene;
+import com.smartmall.tlai.ai.model.AiCallStatus;
+import com.smartmall.tlai.ai.model.AiCallContext;
 import com.smartmall.tlai.ai.model.AiMessageRole;
 import com.smartmall.tlai.ai.model.AiModelConfig;
 import com.smartmall.tlai.ai.model.AiModelType;
@@ -29,13 +32,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AiChatServiceTest {
     @Mock AiModelConfigRepository repository;
     @Mock AiChatGateway gateway;
+    @Mock AiCallLogService callLogService;
     private AiChatService service;
     private AiCredentialCipher credentialCipher;
 
@@ -44,7 +51,7 @@ class AiChatServiceTest {
         AiProperties properties = new AiProperties(
                 Base64.getEncoder().encodeToString(new byte[32]), Duration.ofSeconds(10));
         credentialCipher = new AiCredentialCipher(properties);
-        service = new AiChatService(repository, gateway, properties, credentialCipher);
+        service = new AiChatService(repository, gateway, properties, credentialCipher, callLogService);
     }
 
     @Test
@@ -58,6 +65,8 @@ class AiChatServiceTest {
 
         assertThat(result.content()).isEqualTo("处理建议");
         assertThat(result.modelName()).isEqualTo("test-model");
+        verify(callLogService).record(eq(config), eq(AiCallScene.ASSISTANT_CHAT), eq(AiCallStatus.SUCCESS),
+                anyLong(), eq(1), anyLong(), eq(1), eq(4L), eq(null), eq(null));
     }
 
     @Test
@@ -70,10 +79,38 @@ class AiChatServiceTest {
     }
 
     @Test
+    void shouldRecordFailedProviderCallWithoutSensitiveContent() {
+        AiModelConfig config = model(true, true);
+        when(repository.findActive(AiModelType.CHAT)).thenReturn(Optional.of(config));
+        when(gateway.complete(any(), anyList(), anyString(), anyString(), any()))
+                .thenThrow(new BusinessException(ErrorCode.AI_PROVIDER_ERROR));
+
+        assertThatThrownBy(() -> service.chat(List.of(new AiChatMessage(AiMessageRole.USER, "敏感业务问题"))))
+                .isInstanceOf(BusinessException.class);
+
+        verify(callLogService).record(eq(config), eq(AiCallScene.ASSISTANT_CHAT), eq(AiCallStatus.FAILED),
+                anyLong(), eq(1), anyLong(), eq(0), eq(null), eq(ErrorCode.AI_PROVIDER_ERROR.code()), eq(null));
+    }
+
+    @Test
     void shouldRequireLastMessageFromUser() {
         assertThatThrownBy(() -> service.chat(List.of(new AiChatMessage(AiMessageRole.ASSISTANT, "上一条回复"))))
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+    }
+
+    @Test
+    void shouldPropagateSafeCallContextToAuditLog() {
+        AiModelConfig config = model(true, true);
+        AiCallContext context = new AiCallContext("123e4567-e89b-42d3-a456-426614174000", 21L);
+        when(repository.findActive(AiModelType.CHAT)).thenReturn(Optional.of(config));
+        when(gateway.complete(any(), anyList(), anyString(), anyString(), any()))
+                .thenReturn(new AiChatResult("完成", "test-model", 10));
+
+        service.chat(List.of(new AiChatMessage(AiMessageRole.USER, "检查关联")), context);
+
+        verify(callLogService).record(eq(config), eq(AiCallScene.ASSISTANT_CHAT), eq(AiCallStatus.SUCCESS),
+                anyLong(), eq(1), anyLong(), eq(1), eq(2L), eq(null), eq(context));
     }
 
     private AiModelConfig model(boolean active, boolean enabled) {

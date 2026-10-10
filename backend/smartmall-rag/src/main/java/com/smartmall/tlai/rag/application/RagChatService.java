@@ -49,7 +49,7 @@ public class RagChatService {
                 query, properties.topK(), properties.minScore());
         if (hits.isEmpty()) {
             long latencyMs = (System.nanoTime() - startedAt) / 1_000_000;
-            log.info("RAG chat stopped because no knowledge source matched: latencyMs={}", latencyMs);
+            log.info("RAG 对话已停止，原因是未匹配到知识来源：耗时毫秒={}", latencyMs);
             return new RagChatResult("知识库中没有找到与这个问题足够相关的内容。你可以补充相关文档，或者关闭知识库增强后进行普通对话。",
                     "KNOWLEDGE BASE", latencyMs, List.of());
         }
@@ -57,7 +57,7 @@ public class RagChatService {
         ContextBundle bundle = buildContext(hits);
         AiChatResult answer = chatService.chatWithContext(messages, bundle.systemContext());
         long totalLatencyMs = (System.nanoTime() - startedAt) / 1_000_000;
-        log.info("RAG chat succeeded: sourceCount={}, model={}, totalLatencyMs={}",
+        log.info("RAG 对话成功：知识来源数量={}，模型={}，总耗时毫秒={}",
                 bundle.sources().size(), answer.modelName(), totalLatencyMs);
         return new RagChatResult(answer.content(), answer.modelName(), totalLatencyMs, bundle.sources());
     }

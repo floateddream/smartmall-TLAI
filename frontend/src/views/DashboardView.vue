@@ -142,7 +142,7 @@ onMounted(refreshAll)
     </div>
 
     <section class="data-section orders-section">
-      <div class="section-heading"><div><p class="eyebrow">ACTIVITY / 实时数据</p><h2>近期订单</h2></div><router-link to="/orders" class="text-link">订单管理 <ArrowRight :size="16" /></router-link></div>
+      <div class="section-heading"><div><p class="eyebrow">ACTIVITY / 实时数据</p><h2>近期订单</h2></div><router-link v-if="auth.can('order:view')" to="/orders" class="text-link">订单管理 <ArrowRight :size="16" /></router-link></div>
       <div class="table-scroll">
         <table class="orders-table">
           <thead><tr><th>订单编号</th><th>商品</th><th>客户</th><th>金额</th><th>状态</th><th>创建时间</th></tr></thead>

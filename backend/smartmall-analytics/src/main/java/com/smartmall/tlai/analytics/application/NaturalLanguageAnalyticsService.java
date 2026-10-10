@@ -79,11 +79,11 @@ public class NaturalLanguageAnalyticsService {
         String question = validateQuestion(requestedQuestion);
         long startedAt = System.nanoTime();
         LocalDate today = LocalDate.now(BUSINESS_ZONE);
-        log.info("Natural language analytics started: questionLength={}", question.length());
+        log.info("自然语言数据分析开始：问题长度={}", question.length());
         AiChatResult planResponse = aiChatService.chatWithSystemPrompt(
                 List.of(new AiChatMessage(AiMessageRole.USER, question)), PLANNER_PROMPT.formatted(today));
         AnalyticsQuery query = parsePlan(planResponse.content());
-        log.info("AI analytics plan accepted: metric={}, dimension={}, granularity={}, startDate={}, endDate={}, limit={}",
+        log.info("AI 数据分析计划校验通过：指标={}，维度={}，时间粒度={}，开始日期={}，结束日期={}，返回条数={}",
                 query.metric(), query.dimension(), query.granularity(), query.startDate(), query.endDate(), query.limit());
 
         // 模型只负责选择 DSL 字段；真正执行前仍复用同一套白名单和范围校验。
@@ -93,7 +93,7 @@ public class NaturalLanguageAnalyticsService {
                 List.of(new AiChatMessage(AiMessageRole.USER, question)),
                 EXPLANATION_PROMPT.formatted(resultJson));
         long latencyMs = (System.nanoTime() - startedAt) / 1_000_000;
-        log.info("Natural language analytics succeeded: metric={}, dimension={}, points={}, model={}, latencyMs={}",
+        log.info("自然语言数据分析成功：指标={}，维度={}，数据点数量={}，模型={}，耗时毫秒={}",
                 query.metric(), query.dimension(), analytics.points().size(), explanation.modelName(), latencyMs);
         return new NaturalLanguageAnalyticsResult(question, analytics, explanation.content(),
                 explanation.modelName(), latencyMs);
@@ -124,7 +124,7 @@ public class NaturalLanguageAnalyticsService {
                     LocalDate.parse(requiredText(root, "endDate")),
                     limitNode.intValue());
         } catch (JsonProcessingException | IllegalArgumentException exception) {
-            log.warn("AI analytics plan could not be parsed: responseLength={}",
+            log.warn("AI 数据分析计划解析失败：响应长度={}",
                     content == null ? 0 : content.length());
             throw new BusinessException(ErrorCode.ANALYTICS_INTERPRETATION_FAILED,
                     "模型未能生成有效的分析计划，请换一种说法后重试");

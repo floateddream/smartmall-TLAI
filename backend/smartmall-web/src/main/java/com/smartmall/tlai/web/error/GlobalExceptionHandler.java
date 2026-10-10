@@ -3,6 +3,7 @@ package com.smartmall.tlai.web.error;
 import com.smartmall.tlai.common.api.ApiResponse;
 import com.smartmall.tlai.common.error.BusinessException;
 import com.smartmall.tlai.common.error.ErrorCode;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +27,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
         ErrorCode code = exception.getErrorCode();
-        log.warn("Business request rejected: code={}, message={}", code.code(), exception.getMessage());
+        log.warn("业务请求被拒绝：错误码={}，错误信息={}", code.code(), exception.getMessage());
         return ResponseEntity.status(code.status()).body(ApiResponse.failure(code, exception.getMessage(), null));
     }
 
@@ -66,8 +67,14 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(Exception exception) {
-        log.error("Unexpected request failure", exception);
+    public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(
+            Exception exception, HttpServletResponse response) {
+        if (response.isCommitted()) {
+            // SSE/文件下载等响应提交后客户端断开时，不能再尝试写入普通 JSON 错误体。
+            log.debug("响应提交后请求处理失败：{}", exception.toString());
+            return null;
+        }
+        log.error("请求处理发生未预期异常", exception);
         return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.status())
                 .body(ApiResponse.failure(ErrorCode.INTERNAL_ERROR));
     }

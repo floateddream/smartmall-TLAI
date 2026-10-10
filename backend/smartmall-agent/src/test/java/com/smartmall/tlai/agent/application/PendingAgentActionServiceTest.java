@@ -9,6 +9,8 @@ import com.smartmall.tlai.business.order.application.OrderService;
 import com.smartmall.tlai.business.order.domain.Order;
 import com.smartmall.tlai.business.ticket.application.TicketService;
 import com.smartmall.tlai.business.ticket.domain.AfterSalesTicket;
+import com.smartmall.tlai.common.error.BusinessException;
+import com.smartmall.tlai.common.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -20,6 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -106,6 +109,53 @@ class PendingAgentActionServiceTest {
         assertThat(result.status()).isEqualTo(AgentActionStatus.CANCELLED);
         verify(ticketService, never()).addMessage(anyLong(), any());
         verify(ticketService, never()).create(any());
+    }
+
+    @Test
+    void expiredConfirmationIsMarkedExpiredWithoutExecutingWrite() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        var confirmation = confirmation(7L, AgentActionStatus.PENDING, now.minusSeconds(1));
+        when(repository.findByTokenHash(any())).thenReturn(Optional.of(confirmation));
+
+        assertThatThrownBy(() -> service(new ObjectMapper().findAndRegisterModules()).confirm("raw-token",
+                new AgentUserContext(7L, "admin", Set.of("ticket:reply"))))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.AGENT_ACTION_EXPIRED));
+        verify(repository).markExpired(9L);
+        verify(ticketService, never()).addMessage(anyLong(), any());
+    }
+
+    @Test
+    void confirmationTokenCannotBeUsedByAnotherUser() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        when(repository.findByTokenHash(any())).thenReturn(Optional.of(
+                confirmation(7L, AgentActionStatus.PENDING, now.plusMinutes(5))));
+
+        assertThatThrownBy(() -> service(new ObjectMapper().findAndRegisterModules()).confirm("raw-token",
+                new AgentUserContext(8L, "other", Set.of("ticket:reply"))))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.AGENT_ACTION_NOT_FOUND));
+        verify(repository, never()).markExecuting(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void revokedPermissionPreventsConfirmationExecution() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        when(repository.findByTokenHash(any())).thenReturn(Optional.of(
+                confirmation(7L, AgentActionStatus.PENDING, now.plusMinutes(5))));
+
+        assertThatThrownBy(() -> service(new ObjectMapper().findAndRegisterModules()).confirm("raw-token",
+                new AgentUserContext(7L, "admin", Set.of())))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+        verify(repository, never()).markExecuting(anyLong(), anyLong(), any());
+        verify(ticketService, never()).addMessage(anyLong(), any());
+    }
+
+    private AgentActionConfirmation confirmation(long userId, AgentActionStatus status, OffsetDateTime expiresAt) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        return new AgentActionConfirmation(9L, "hash", userId, "admin", "addTicketReply",
+                "{\"ticketId\":3,\"content\":\"已收到\"}", status, expiresAt, null, now, null);
     }
 
     private PendingAgentActionService service(ObjectMapper mapper) {
