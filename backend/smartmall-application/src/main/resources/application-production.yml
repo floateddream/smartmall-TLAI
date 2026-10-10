@@ -1,0 +1,20 @@
+server:
+  shutdown: graceful
+  forward-headers-strategy: framework
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    hikari:
+      maximum-pool-size: 8
+      minimum-idle: 1
+      connection-timeout: 10000
+      validation-timeout: 3000
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

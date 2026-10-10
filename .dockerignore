@@ -1,0 +1,15 @@
+.git
+.idea
+.vscode
+**/target
+**/node_modules
+**/dist
+**/.test-dist
+**/*.tsbuildinfo
+.env
+.env.*
+!.env.example
+!deploy/.env.example
+**/application-local.yml
+**/application-local.yaml
+*.log

@@ -1,0 +1,33 @@
+{
+  "generatedAt": "2026-10-10T02:57:37.521448+00:00",
+  "executionMode": "OFFLINE_DATASET_VALIDATION",
+  "realModelExecuted": false,
+  "dataset": {
+    "locale": "zh-CN",
+    "caseCount": 12,
+    "categories": [
+      "agent-clarification",
+      "agent-confirmation",
+      "agent-order",
+      "agent-refund",
+      "agent-safety",
+      "agent-ticket",
+      "analytics",
+      "analytics-injection",
+      "chat",
+      "prompt-injection",
+      "rag-grounded",
+      "rag-refusal"
+    ]
+  },
+  "results": {
+    "predictionsEvaluated": 0,
+    "passed": null,
+    "accuracy": null,
+    "latencyMsAverage": null,
+    "inputTokensTotal": null,
+    "outputTokensTotal": null
+  },
+  "details": [],
+  "notice": "真实模型未执行；本报告只验证数据集结构。"
+}

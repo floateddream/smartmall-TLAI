@@ -1,0 +1,38 @@
+# 将 __PUBLIC_HOST__ 替换为实际域名，并把证书以只读方式挂载到 /etc/nginx/tls 后启用。
+server {
+    listen 80;
+    server_name __PUBLIC_HOST__;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name __PUBLIC_HOST__;
+    server_tokens off;
+
+    ssl_certificate /etc/nginx/tls/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:TLS:10m;
+    ssl_session_timeout 1d;
+
+    root /usr/share/nginx/html;
+    index index.html;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    location = /healthz { access_log off; default_type text/plain; return 200 "ok\n"; }
+    location /api/ {
+        proxy_pass http://backend:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_buffering off;
+        proxy_read_timeout 180s;
+    }
+    location / { try_files $uri $uri/ /index.html; }
+}
