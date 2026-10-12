@@ -1,0 +1,76 @@
+name: smartmall-tlai-app
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend/Dockerfile
+    image: smartmall-tlai-backend:${SMARTMALL_IMAGE_TAG:-server}
+    container_name: smartmall-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      SMARTMALL_DB_URL: jdbc:postgresql://smartmall-postgres:5432/${POSTGRES_DB:-smartmall}
+      SMARTMALL_DB_USERNAME: ${POSTGRES_USER:-smartmall}
+      SMARTMALL_DB_PASSWORD: ${POSTGRES_PASSWORD:?请在 deploy/.env 中设置 POSTGRES_PASSWORD}
+      SMARTMALL_REDIS_HOST: smartmall-redis
+      SMARTMALL_REDIS_PORT: 6379
+      SMARTMALL_REDIS_PASSWORD: ${REDIS_PASSWORD:?请在 deploy/.env 中设置 REDIS_PASSWORD}
+      SMARTMALL_REDIS_TIMEOUT: ${SMARTMALL_REDIS_TIMEOUT:-5s}
+      SMARTMALL_MINIO_ENDPOINT: http://smartmall-minio:9000
+      SMARTMALL_MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?请在 deploy/.env 中设置 MINIO_ACCESS_KEY}
+      SMARTMALL_MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?请在 deploy/.env 中设置 MINIO_SECRET_KEY}
+      SMARTMALL_MINIO_BUCKET: ${SMARTMALL_MINIO_BUCKET:-smartmall-documents}
+      SMARTMALL_JWT_SECRET: ${SMARTMALL_JWT_SECRET:?请设置至少 32 字节随机 JWT 密钥}
+      SMARTMALL_AI_MASTER_KEY: ${SMARTMALL_AI_MASTER_KEY:?请设置至少 32 字节随机 AI 主密钥}
+      SMARTMALL_AI_REQUEST_TIMEOUT: ${SMARTMALL_AI_REQUEST_TIMEOUT:-60s}
+      SMARTMALL_CORS_ALLOWED_ORIGINS: ${SMARTMALL_CORS_ALLOWED_ORIGINS:?请设置网站 Origin}
+      SMARTMALL_BOOTSTRAP_ADMIN_ENABLED: ${SMARTMALL_BOOTSTRAP_ADMIN_ENABLED:-false}
+      SMARTMALL_BOOTSTRAP_ADMIN_USERNAME: ${SMARTMALL_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      SMARTMALL_BOOTSTRAP_ADMIN_EMAIL: ${SMARTMALL_BOOTSTRAP_ADMIN_EMAIL:-admin@smartmall.local}
+      SMARTMALL_BOOTSTRAP_ADMIN_PASSWORD: ${SMARTMALL_BOOTSTRAP_ADMIN_PASSWORD:-}
+      JAVA_OPTS: -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8
+    mem_limit: 1280m
+    cpus: 0.75
+    networks:
+      - edge
+      - infra
+      - minio
+      - ollama
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend/Dockerfile
+    image: smartmall-tlai-frontend:${SMARTMALL_IMAGE_TAG:-server}
+    container_name: smartmall-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80"
+    mem_limit: 128m
+    cpus: 0.10
+    networks:
+      - edge
+    logging: *default-logging
+
+networks:
+  edge:
+  infra:
+    external: true
+    name: ${SMARTMALL_INFRA_NETWORK:-infra_default}
+  minio:
+    external: true
+    name: ${SMARTMALL_MINIO_NETWORK:-minio_default}
+  ollama:
+    external: true
+    name: ${SMARTMALL_OLLAMA_NETWORK:-ollama_default}

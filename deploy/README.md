@@ -13,6 +13,26 @@
 
 默认只发布前端 `80`；数据库、缓存、对象存储控制台和后端端口均不发布。`data` 网络设为 internal。默认内存上限约 2.9 GiB，目标环境为 2 核 4 GiB 的演示或轻量负载服务器，但在完成实机验收和压测前不作容量承诺。
 
+## 两种部署方式
+
+仓库提供两套 Compose，按服务器现状选择其一，不要同时启动：
+
+| 文件 | 使用场景 |
+| --- | --- |
+| `deploy/compose.yaml` | 全新服务器，由 Compose 创建 PostgreSQL、Redis、MinIO、后端和前端。当前仍需部署者提供可用的固定 MinIO/MC 镜像。 |
+| `deploy/compose.server.yaml` | 服务器已经运行 PostgreSQL、Redis、MinIO 和 Ollama，只构建后端与前端并加入现有 Docker 网络。 |
+
+复用已有基础设施前，先用 `docker network ls` 和 `docker inspect` 确认容器网络。复制环境变量模板并只在服务器填写真实凭据：
+
+```bash
+cp deploy/server.env.example deploy/.env
+docker compose --env-file deploy/.env -f deploy/compose.server.yaml config --quiet
+docker compose --env-file deploy/.env -f deploy/compose.server.yaml up -d --build
+docker compose --env-file deploy/.env -f deploy/compose.server.yaml ps
+```
+
+这套配置默认通过容器名连接 `smartmall-postgres`、`smartmall-redis` 和 `smartmall-minio`，并连接外部网络 `infra_default`、`minio_default`、`ollama_default`。名称不一致时只修改 `deploy/.env` 中的网络变量，不要把服务器专用名称或密码写入 Compose。Ollama 模型地址应在后台配置为 `http://smartmall-ollama:11434/v1`。已有数据库存在管理员时保持 `SMARTMALL_BOOTSTRAP_ADMIN_ENABLED=false`。
+
 ## 首次部署
 
 1. 安装 Docker Engine 与 Compose v2，准备至少 4 GiB 内存和持久磁盘。
