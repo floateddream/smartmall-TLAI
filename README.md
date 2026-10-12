@@ -56,7 +56,9 @@ pnpm build
 
 后端唯一入口为 `smartmall-application` 模块中的 `SmartMallTlaiApplication`。更细的本地配置见 [本地启动指南](docs/本地启动指南.md)。
 
-## 生产部署
+## Docker Compose 部署
+
+仓库提供面向 Linux 服务器的 Docker Compose 部署模板。该模板尚未在全新服务器上完成端到端实机验收，正式对外发布前应先在独立环境验证镜像获取、数据持久化、健康检查、备份和恢复流程。当前 MinIO 使用可配置镜像，部署者必须将 `MINIO_IMAGE`、`MINIO_MC_IMAGE` 设置为自己能够拉取或已经构建的固定版本。
 
 生产拓扑仅由 Nginx 发布一个 HTTP 端口；PostgreSQL、Redis、MinIO 和后端均只在 Compose 网络内可见。部署前必须设置独立强密码、JWT 密钥和 AI 加密主密钥：
 
@@ -67,7 +69,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml config
 docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 ```
 
-完整的健康检查、HTTPS 接入、备份与恢复说明见 [部署指南](deploy/README.md)。仓库不会自动执行恢复脚本；恢复必须显式传入 `--confirm-overwrite`。
+完整的环境要求、已知限制、健康检查、HTTPS 接入、备份与恢复说明见 [Docker Compose 部署指南](deploy/README.md)。仓库不会自动执行恢复脚本；恢复必须显式传入 `--confirm-overwrite`。
 
 ## AI 评测
 
@@ -84,7 +86,9 @@ python evals/run_evals.py
 - [API 说明](docs/API说明.md)
 - [AI 模型与助手说明](docs/AI模型与助手说明.md)
 - [前后端交互与菜单路由](docs/前后端交互与菜单路由.md)
-- [阶段 9 验收说明](docs/阶段9工程化验收说明.md)
+- [本地启动指南](docs/本地启动指南.md)
+- [后台功能验收指南](docs/阶段8后台验收说明.md)
+- [工程化与开源验收指南](docs/阶段9工程化验收说明.md)
 - [面试讲解提纲](docs/面试讲解提纲.md)
 - [项目截图清单](docs/项目截图清单.md)
 

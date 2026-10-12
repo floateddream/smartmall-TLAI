@@ -2,7 +2,7 @@
 
 ## 目标
 
-阶段 8.1 在不记录敏感内容的前提下，为 CHAT 与 EMBEDDING 模型调用提供统一、可筛选的运行日志。日志用于管理员排查供应商错误、模型配置问题、调用耗时和调用规模，不承担会话归档或业务审计职责。
+AI 调用日志在不记录敏感内容的前提下，为 CHAT 与 EMBEDDING 模型调用提供统一、可筛选的运行记录。日志用于管理员排查供应商错误、模型配置问题、调用耗时和调用规模，不承担会话归档或业务审计职责。
 
 ## 调用链
 
@@ -60,7 +60,7 @@ GET /api/ai/call-logs?page=1&size=20&modelType=CHAT&provider=OPENAI&scene=ASSIST
 
 ## 审计详情与安全关联
 
-阶段 8.3 增加单条安全详情接口：
+系统提供单条安全详情接口：
 
 ```text
 GET /api/ai/call-logs/{id}
@@ -81,5 +81,5 @@ mvn test
 前端执行：
 
 ```powershell
-npm run build
+pnpm build
 ```
