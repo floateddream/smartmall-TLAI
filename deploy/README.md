@@ -33,6 +33,22 @@ docker compose --env-file deploy/.env -f deploy/compose.server.yaml ps
 
 这套配置默认通过容器名连接 `smartmall-postgres`、`smartmall-redis` 和 `smartmall-minio`，并连接外部网络 `infra_default`、`minio_default`、`ollama_default`。名称不一致时只修改 `deploy/.env` 中的网络变量，不要把服务器专用名称或密码写入 Compose。Ollama 模型地址应在后台配置为 `http://smartmall-ollama:11434/v1`。已有数据库存在管理员时保持 `SMARTMALL_BOOTSTRAP_ADMIN_ENABLED=false`。
 
+### 服务器前端一键更新
+
+首次完成服务器部署后，前端代码更新可以在项目根目录执行：
+
+```bash
+sh deploy/scripts/update-frontend.sh
+```
+
+脚本会拉取当前 Git 分支、检查 Compose 配置、重新构建前端镜像、替换前端容器并等待健康检查通过。服务器存在未提交的已跟踪文件时，脚本会在拉取前停止；如果已经手动执行过 `git pull`，可以跳过拉取：
+
+```bash
+sh deploy/scripts/update-frontend.sh --skip-pull
+```
+
+该脚本只更新前端，不重建后端，也不会修改 `deploy/.env` 或基础设施容器。
+
 ## 首次部署
 
 1. 安装 Docker Engine 与 Compose v2，准备至少 4 GiB 内存和持久磁盘。
