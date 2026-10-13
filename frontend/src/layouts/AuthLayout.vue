@@ -7,7 +7,7 @@ import AuthScene from '@/components/AuthScene.vue'
     <AuthScene />
     <div class="auth-layout__content">
       <div class="auth-intro">
-        <router-link to="/login" class="brand brand--auth" aria-label="SmartMall TLAI 登录">
+        <router-link :to="{ name: 'login' }" class="brand brand--auth" aria-label="SmartMall TLAI 登录">
           <span class="brand__mark">S<span>.</span></span>
           <span>SmartMall <strong>TLAI</strong></span>
         </router-link>

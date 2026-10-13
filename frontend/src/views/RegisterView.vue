@@ -42,7 +42,7 @@ async function submit() {
   try {
     await auth.register({ username: form.username, email: form.email, password: form.password })
     ElMessage.success('注册成功，请登录')
-    await router.replace('/login')
+    await router.replace({ name: 'login' })
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : '注册失败，请重试'
   } finally {
@@ -56,7 +56,7 @@ async function submit() {
     <section class="auth-panel auth-panel--register" aria-labelledby="register-heading">
       <div class="auth-panel__topline"><span>NEW ACCOUNT</span><span>02 — 02</span></div>
       <div class="auth-panel__heading">
-        <router-link class="back-link" to="/login"><ArrowLeft :size="15" /> 返回登录</router-link>
+        <router-link class="back-link" :to="{ name: 'login' }"><ArrowLeft :size="15" /> 返回登录</router-link>
         <h2 id="register-heading">创建账号</h2>
         <p>加入 SmartMall TLAI 工作台</p>
       </div>
@@ -93,7 +93,7 @@ async function submit() {
           <span>{{ loading ? '正在创建...' : '创建账号' }}</span><ArrowRight :size="18" />
         </button>
       </el-form>
-      <div class="auth-panel__switch">已有账号？ <router-link to="/login">直接登录 <ArrowRight :size="14" /></router-link></div>
+      <div class="auth-panel__switch">已有账号？ <router-link :to="{ name: 'login' }">直接登录 <ArrowRight :size="14" /></router-link></div>
     </section>
   </AuthLayout>
 </template>

@@ -6,8 +6,8 @@ import { decideRouteAccess } from '../src/utils/routePolicy.js'
 import { LatestRequestGate, requestErrorMessage } from '../src/utils/requestState.js'
 
 test('route policy separates guests, unauthenticated users, and missing permissions', () => {
-  assert.deepEqual(decideRouteAccess({ guest: true }, '/login', true, () => false), { name: 'dashboard' })
-  assert.equal(decideRouteAccess({ guest: true }, '/login', false, () => false), true)
+  assert.deepEqual(decideRouteAccess({ guest: true }, '/web/toLogin', true, () => false), { name: 'dashboard' })
+  assert.equal(decideRouteAccess({ guest: true }, '/web/toLogin', false, () => false), true)
   assert.deepEqual(decideRouteAccess({}, '/orders?page=2', false, () => false), {
     name: 'login', query: { redirect: '/orders?page=2' },
   })

@@ -47,7 +47,7 @@ watch(() => route.fullPath, () => { mobileOpen.value = false })
 
 function logout() {
   auth.logout()
-  void router.replace('/login')
+  void router.replace({ name: 'login' })
 }
 </script>
 

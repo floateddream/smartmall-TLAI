@@ -280,6 +280,77 @@ a { color: inherit; text-decoration: none; }
 .catalog-feedback--error { color: #ffae78; }
 .catalog-feedback .text-link { display: inline-flex; margin-left: 8px; border: 0; background: transparent; }
 .catalog-pagination { justify-content: flex-end; margin-top: 18px; }
+
+/* 全局分页：覆盖 Element Plus 的浅色默认按钮，保证所有业务列表与暗色主题一致。 */
+.el-pagination.is-background {
+  --el-pagination-button-width: 40px;
+  --el-pagination-button-height: 40px;
+  --el-pagination-button-bg-color: #172331;
+  --el-pagination-button-color: #b5c4cf;
+  --el-pagination-button-disabled-bg-color: #101923;
+  --el-pagination-button-disabled-color: #526474;
+  --el-pagination-hover-color: var(--teal);
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 9px;
+  color: #9fb0bd;
+  white-space: normal;
+}
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next,
+.el-pagination.is-background .el-pager li {
+  border: 1px solid #2d3c4b;
+  border-radius: 5px;
+  color: var(--el-pagination-button-color);
+  background: var(--el-pagination-button-bg-color);
+  box-shadow: inset 0 1px rgba(255,255,255,.025);
+  transition: color .2s, border-color .2s, background .2s, box-shadow .2s, transform .2s;
+}
+.el-pagination.is-background .btn-prev:not(:disabled):hover,
+.el-pagination.is-background .btn-next:not(:disabled):hover,
+.el-pagination.is-background .el-pager li:not(.is-active):hover {
+  border-color: rgba(45,212,191,.55);
+  color: #72e8d8;
+  background: #1b3038;
+  box-shadow: 0 0 16px rgba(45,212,191,.08);
+  transform: translateY(-1px);
+}
+.el-pagination.is-background .el-pager li.is-active {
+  border-color: transparent;
+  color: #06161b;
+  background: linear-gradient(95deg, var(--teal), var(--blue));
+  box-shadow: 0 0 18px rgba(45,212,191,.2);
+}
+.el-pagination.is-background .btn-prev:disabled,
+.el-pagination.is-background .btn-next:disabled {
+  border-color: #202d39;
+  color: var(--el-pagination-button-disabled-color);
+  background: var(--el-pagination-button-disabled-bg-color);
+  box-shadow: none;
+}
+.el-pagination.is-background .el-pagination__total {
+  color: #a8bac7;
+  font-size: 12px;
+}
+.el-pagination.is-background .el-pager li.more {
+  color: #8297a7;
+}
+
+@media (max-width: 640px) {
+  .el-pagination.is-background {
+    --el-pagination-button-width: 34px;
+    --el-pagination-button-height: 36px;
+    justify-content: center;
+  }
+  .el-pagination.is-background .btn-prev,
+  .el-pagination.is-background .btn-next,
+  .el-pagination.is-background .el-pager li { margin: 0 2px; }
+  .el-pagination.is-background .el-pagination__total {
+    flex-basis: 100%;
+    margin: 2px 0 0;
+    text-align: center;
+  }
+}
 .catalog-form .el-form-item__label { color: #b8c6ce; }
 .catalog-form__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
 .catalog-form__row .el-input-number { width: 100%; }

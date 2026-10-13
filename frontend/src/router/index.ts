@@ -5,8 +5,10 @@ import { decideRouteAccess } from '@/utils/routePolicy'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/dashboard' },
-    { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { guest: true } },
+    // 对外统一使用固定登录入口，避免根地址或历史地址长期停留在非标准 URL。
+    { path: '/', redirect: '/web/toLogin' },
+    { path: '/web/toLogin', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { guest: true } },
+    { path: '/login', redirect: to => ({ name: 'login', query: to.query, hash: to.hash }) },
     { path: '/register', name: 'register', component: () => import('@/views/RegisterView.vue'), meta: { guest: true } },
     {
       path: '/',
@@ -27,7 +29,7 @@ const router = createRouter({
         { path: 'ai-call-logs', name: 'ai-call-logs', component: () => import('@/views/AiCallLogView.vue'), meta: { title: '调用日志', section: '系统设置', permission: 'ai:call_log_view' } },
       ],
     },
-    { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
+    { path: '/:pathMatch(.*)*', redirect: '/web/toLogin' },
   ],
 })
 
