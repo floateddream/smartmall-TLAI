@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BarChart3, Boxes, BrainCircuit, ChevronDown, ChevronRight,
@@ -7,12 +7,26 @@ import {
   RotateCcw, Settings2, ShieldCheck, ShoppingBag, Ticket, UserRound, UsersRound,
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import RouteTransitionLayer, { type RouteMotionTone } from '@/components/RouteTransitionLayer.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const collapsed = ref(false)
 const mobileOpen = ref(false)
+const routeMotionSequence = ref(0)
+const routeMotionActive = ref(false)
+const routeMotionDirection = ref<'forward' | 'backward'>('forward')
+const routeMotionOrigin = ref({ x: 246, y: 150 })
+const routeMotionTone = ref<RouteMotionTone>('aurora')
+let routeMotionTimer = 0
+let preparedMotionPath = ''
+
+const routeOrder = [
+  '/dashboard', '/products', '/customers', '/orders', '/refunds', '/tickets',
+  '/assistant', '/knowledge', '/data-analysis', '/agent-audits',
+  '/access-control', '/models', '/ai-call-logs',
+]
 
 const groups = computed(() => [
   { label: '总览', items: [{ path: '/dashboard', label: '仪表盘', icon: LayoutDashboard, permission: 'dashboard:view' }] },
@@ -45,14 +59,45 @@ const roleLabel = computed(() => {
 
 watch(() => route.fullPath, () => { mobileOpen.value = false })
 
+watch(() => route.path, (path, previousPath) => {
+  const currentIndex = routeOrder.indexOf(path)
+  const previousIndex = routeOrder.indexOf(previousPath)
+  routeMotionDirection.value = currentIndex >= previousIndex ? 'forward' : 'backward'
+  if (preparedMotionPath !== path) {
+    routeMotionOrigin.value = { x: collapsed.value ? 72 : 246, y: 108 }
+  }
+  preparedMotionPath = ''
+  routeMotionTone.value = toneForPath(path)
+  routeMotionSequence.value += 1
+  routeMotionActive.value = true
+  window.clearTimeout(routeMotionTimer)
+  routeMotionTimer = window.setTimeout(() => { routeMotionActive.value = false }, 720)
+})
+
+function toneForPath(path: string): RouteMotionTone {
+  if (path.startsWith('/assistant') || path.startsWith('/knowledge') || path.startsWith('/data-analysis') || path.startsWith('/agent-audits')) return 'purple'
+  if (path.startsWith('/refunds') || path.startsWith('/tickets')) return 'orange'
+  return 'aurora'
+}
+
+function prepareRouteMotion(event: MouseEvent, path: string) {
+  if (path === route.path) return
+  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  routeMotionOrigin.value = { x: bounds.right, y: bounds.top + bounds.height / 2 }
+  routeMotionTone.value = toneForPath(path)
+  preparedMotionPath = path
+}
+
 function logout() {
   auth.logout()
   void router.replace({ name: 'login' })
 }
+
+onBeforeUnmount(() => window.clearTimeout(routeMotionTimer))
 </script>
 
 <template>
-  <div class="console" :class="{ 'console--collapsed': collapsed, 'console--mobile-open': mobileOpen }">
+  <div class="console" :class="{ 'console--collapsed': collapsed, 'console--mobile-open': mobileOpen, 'console--route-motion': routeMotionActive, 'console--route-backward': routeMotionDirection === 'backward' }">
     <button v-if="mobileOpen" type="button" class="mobile-scrim" aria-label="关闭导航" @click="mobileOpen = false" />
     <aside class="sidebar" aria-label="主导航">
       <div class="sidebar__brand">
@@ -66,7 +111,7 @@ function logout() {
       <nav class="sidebar__nav">
         <div v-for="group in groups" :key="group.label" class="nav-group">
           <p class="nav-group__label">{{ group.label }}</p>
-          <router-link v-for="item in group.items" :key="item.path" :to="item.path" class="nav-link" :title="collapsed ? item.label : undefined" :aria-label="item.label">
+          <router-link v-for="item in group.items" :key="item.path" :to="item.path" class="nav-link" :title="collapsed ? item.label : undefined" :aria-label="item.label" @click="prepareRouteMotion($event, item.path)">
             <component :is="item.icon" :size="18" :stroke-width="1.8" class="nav-link__icon" />
             <span class="nav-link__text">{{ item.label }}</span>
             <ChevronRight :size="15" class="nav-link__arrow" />
@@ -87,6 +132,7 @@ function logout() {
     </aside>
 
     <div class="console__main">
+      <RouteTransitionLayer :sequence="routeMotionSequence" :origin="routeMotionOrigin" :tone="routeMotionTone" />
       <header class="topbar">
         <div class="topbar__left">
           <button type="button" class="icon-button topbar__menu" aria-label="打开导航" title="打开导航" @click="mobileOpen = true"><Menu :size="21" /></button>
@@ -111,7 +157,7 @@ function logout() {
       </header>
       <main class="console__content">
         <router-view v-slot="{ Component }">
-          <transition name="content" mode="out-in">
+          <transition name="route-data" mode="out-in">
             <component :is="Component" :key="route.path" />
           </transition>
         </router-view>

@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Archive, ArrowUpRight, BookOpenCheck, Bot, CheckCircle2, CircleAlert, CircleHelp, Clock3, MessageSquarePlus, RefreshCw, Send, ShieldCheck, Sparkles, Square, UserRound, Wrench, X } from 'lucide-vue-next'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import MarkdownContent from '@/components/MarkdownContent.vue'
 import {
   aiApi,
   type AiAgentActionResult,
@@ -372,7 +373,7 @@ onBeforeUnmount(() => streamController?.abort())
               <div v-if="message.responseType === 'CLARIFICATION' || message.responseType === 'UNSUPPORTED'" class="chat-guidance-label">
                 <CircleHelp :size="13" />{{ message.responseType === 'CLARIFICATION' ? '需要补充信息' : '当前能力说明' }}
               </div>
-              <p>{{ message.content }}</p>
+              <MarkdownContent class="chat-message__content" :content="message.content" />
               <details v-if="message.sources?.length" class="chat-sources">
                 <summary><BookOpenCheck :size="14" />引用来源 {{ message.sources.length }}</summary>
                 <div class="chat-sources__list">

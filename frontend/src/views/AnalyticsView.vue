@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { BarChart3, CalendarRange, CircleAlert, Database, Hash, History, MessageSquareText, RefreshCw, Sparkles, Trophy } from 'lucide-vue-next'
 import AnalyticsChart from '@/components/AnalyticsChart.vue'
+import MarkdownContent from '@/components/MarkdownContent.vue'
 import { ApiError } from '@/api/client'
 import {
   analyticsApi,
@@ -371,7 +372,7 @@ onMounted(() => {
         <div><p class="eyebrow">AI INSIGHT / 模型解读</p><h2>分析结论</h2></div>
         <span>{{ explanationModel }} · {{ explanationLatency }}ms</span>
       </div>
-      <p>{{ explanation }}</p>
+      <MarkdownContent class="analytics-insight__content" :content="explanation" />
     </section>
 
     <section class="data-section analytics-result" :class="{ 'analytics-loading': busy }">
