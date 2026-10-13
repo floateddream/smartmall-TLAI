@@ -773,6 +773,7 @@ a { color: inherit; text-decoration: none; }
 .model-form-grid .el-input-number { width: 100%; }
 
 .assistant-view { height: calc(100vh - 143px); min-height: 570px; display: grid; grid-template-rows: auto minmax(0,1fr); }
+.assistant-view--model-required { grid-template-rows: auto auto minmax(0,1fr); }
 .assistant-head { display: flex; align-items: center; justify-content: space-between; min-height: 76px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
 .assistant-head h1 { margin: 5px 0 0; color: #ecf4f6; font-size: 25px; }
 .assistant-head__tools { display: flex; align-items: center; gap: 9px; }
@@ -1194,7 +1195,8 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-  padding: 12px 16px;
+  min-height: 62px;
+  padding: 10px 16px;
   border-block: 1px solid rgba(255, 184, 77, .24);
   background: rgba(255, 184, 77, .07);
   color: var(--text-primary);

@@ -335,7 +335,7 @@ onBeforeUnmount(() => streamController?.abort())
 </script>
 
 <template>
-  <div class="assistant-view">
+  <div class="assistant-view" :class="{ 'assistant-view--model-required': modelSetupRequired }">
     <header class="assistant-head">
       <div><p class="eyebrow">INTELLIGENCE / CHAT</p><h1>AI 助手<span class="heading-spark">.</span></h1></div>
       <div class="assistant-head__tools">
