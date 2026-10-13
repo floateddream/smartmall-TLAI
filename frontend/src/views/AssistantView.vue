@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Archive, ArrowUpRight, BookOpenCheck, Bot, CheckCircle2, CircleAlert, CircleHelp, Clock3, MessageSquarePlus, RefreshCw, Send, ShieldCheck, Sparkles, Square, UserRound, Wrench, X } from 'lucide-vue-next'
+import { Archive, ArrowUpRight, BookOpenCheck, Bot, CheckCircle2, CircleAlert, CircleHelp, Clock3, KeyRound, MessageSquarePlus, RefreshCw, Send, ShieldCheck, Sparkles, Square, UserRound, Wrench, X } from 'lucide-vue-next'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownContent from '@/components/MarkdownContent.vue'
 import {
@@ -21,6 +21,7 @@ import { sanitizeAgentNavigation } from '@/utils/routeQuery'
 import { readPositiveQueryId } from '@/utils/routeQuery'
 import { LatestRequestGate, requestErrorMessage } from '@/utils/requestState'
 import { useAuthStore } from '@/stores/auth'
+import { ApiError } from '@/api/client'
 
 interface DisplayMessage extends AiChatMessage {
   id: number
@@ -49,6 +50,7 @@ const conversationListLoading = ref(false)
 const conversationListError = ref('')
 const historyError = ref('')
 const capabilityError = ref('')
+const modelSetupRequired = ref(false)
 const archiving = ref(false)
 const actingToken = ref('')
 const capabilities = ref<AiCapability[]>([])
@@ -164,7 +166,7 @@ async function ensureConversation() {
 
 async function send() {
   const content = draft.value.trim()
-  if (!content || sending.value) return
+  if (!content || sending.value || modelSetupRequired.value) return
   let conversationId: number
   try {
     conversationId = await ensureConversation()
@@ -204,7 +206,12 @@ async function send() {
     } else {
       console.error('[AI助手] 流式消息失败', error)
       assistantMessage.responseType = 'SYSTEM_ERROR'
-      assistantMessage.content ||= error instanceof Error ? error.message : 'AI 请求失败'
+      if (error instanceof ApiError && error.code === 'AI_USER_MODEL_NOT_CONFIGURED') {
+        modelSetupRequired.value = true
+        assistantMessage.content = '当前账号还没有启用个人聊天模型。请先进入“我的模型”完成配置和连通性测试。'
+      } else {
+        assistantMessage.content ||= error instanceof Error ? error.message : 'AI 请求失败'
+      }
       ElMessage.error(assistantMessage.content)
     }
   } finally {
@@ -286,6 +293,15 @@ async function loadCapabilities() {
   }
 }
 
+async function loadPersonalModelStatus() {
+  try {
+    const models = await aiApi.listModels()
+    modelSetupRequired.value = !models.some(model => model.modelType === 'CHAT' && model.active && model.enabled)
+  } catch (error) {
+    console.error('[AI助手] 个人模型状态加载失败', error)
+  }
+}
+
 function formatExpiry(value: string) {
   return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     .format(new Date(value))
@@ -311,7 +327,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 onMounted(async () => {
   const linkedConversationId = readPositiveQueryId(route.query.conversationId)
-  await Promise.all([loadCapabilities(), loadConversations(!linkedConversationId)])
+  await Promise.all([loadCapabilities(), loadPersonalModelStatus(), loadConversations(!linkedConversationId)])
   if (linkedConversationId) await openConversation(linkedConversationId)
 })
 
@@ -332,6 +348,12 @@ onBeforeUnmount(() => streamController?.abort())
         <button type="button" class="icon-button" title="新建会话" aria-label="新建会话" :disabled="sending" @click="startNewConversation"><MessageSquarePlus :size="18" /></button>
       </div>
     </header>
+
+    <div v-if="modelSetupRequired" class="assistant-model-notice" role="alert">
+      <KeyRound :size="20" />
+      <div><strong>先连接你的聊天模型</strong><span>AI 助手只会使用当前账号自己的模型和 API Key，不会消耗其他账号的额度。</span></div>
+      <button type="button" class="primary-button" @click="router.push('/models')">配置我的模型<ArrowUpRight :size="15" /></button>
+    </div>
 
     <div class="assistant-workspace">
       <aside class="conversation-rail" aria-label="AI 会话历史">
@@ -409,10 +431,10 @@ onBeforeUnmount(() => streamController?.abort())
         </section>
 
         <footer class="assistant-composer">
-          <textarea ref="composerInput" v-model="draft" maxlength="4000" rows="3" placeholder="输入任何问题" :disabled="sending" @keydown="handleKeydown" />
+          <textarea ref="composerInput" v-model="draft" maxlength="4000" rows="3" :placeholder="modelSetupRequired ? '请先配置个人聊天模型' : '输入任何问题'" :disabled="sending || modelSetupRequired" @keydown="handleKeydown" />
           <div class="assistant-composer__meta"><span>{{ remaining }}</span><span>{{ activeConversation?.awaitingParameters ? 'MULTI-TURN / WAITING INPUT' : 'SMART AGENT / SSE' }}</span></div>
           <button v-if="sending" type="button" class="assistant-send assistant-send--stop" title="停止接收" aria-label="停止接收" @click="stopStream"><Square :size="16" /></button>
-          <button v-else type="button" class="assistant-send" title="发送消息" aria-label="发送消息" :disabled="!draft.trim()" @click="send"><Send :size="19" /></button>
+          <button v-else type="button" class="assistant-send" title="发送消息" aria-label="发送消息" :disabled="!draft.trim() || modelSetupRequired" @click="send"><Send :size="19" /></button>
         </footer>
       </div>
     </div>

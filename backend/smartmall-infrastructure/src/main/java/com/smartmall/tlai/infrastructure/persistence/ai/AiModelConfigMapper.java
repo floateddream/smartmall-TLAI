@@ -18,10 +18,18 @@ public interface AiModelConfigMapper extends BaseMapper<AiModelConfigPersistence
     @Update("""
             UPDATE ai_model_config
             SET active = FALSE, updated_by = #{operatorId}, updated_at = #{changedAt}
-            WHERE model_type = #{modelType} AND active = TRUE
+            WHERE model_type = #{modelType} AND active = TRUE AND owner_user_id IS NULL
             """)
-    int clearActive(@Param("modelType") AiModelType modelType,
-                    @Param("changedAt") OffsetDateTime changedAt, @Param("operatorId") long operatorId);
+    int clearSystemActive(@Param("modelType") AiModelType modelType,
+                          @Param("changedAt") OffsetDateTime changedAt, @Param("operatorId") long operatorId);
+
+    @Update("""
+            UPDATE ai_model_config
+            SET active = FALSE, updated_by = #{operatorId}, updated_at = #{changedAt}
+            WHERE model_type = #{modelType} AND active = TRUE AND owner_user_id = #{ownerUserId}
+            """)
+    int clearOwnerActive(@Param("modelType") AiModelType modelType, @Param("ownerUserId") long ownerUserId,
+                         @Param("changedAt") OffsetDateTime changedAt, @Param("operatorId") long operatorId);
 
     @Update("""
             UPDATE ai_model_config

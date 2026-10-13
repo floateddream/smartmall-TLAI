@@ -49,11 +49,6 @@ public class AiChatService {
     }
 
     @Transactional(readOnly = true)
-    public AiChatResult chat(List<AiChatMessage> requestedMessages) {
-        return chat(requestedMessages, null);
-    }
-
-    @Transactional(readOnly = true)
     public AiChatResult chat(List<AiChatMessage> requestedMessages, AiCallContext context) {
         return complete(validateMessages(requestedMessages), SYSTEM_PROMPT,
                 AiCallScene.ASSISTANT_CHAT, context);
@@ -61,17 +56,13 @@ public class AiChatService {
 
     /** 供 RAG 等内部用例追加可信系统上下文，普通用户消息不能直接控制该内容。 */
     @Transactional(readOnly = true)
-    public AiChatResult chatWithContext(List<AiChatMessage> requestedMessages, String systemContext) {
+    public AiChatResult chatWithContext(List<AiChatMessage> requestedMessages, String systemContext,
+                                        AiCallContext context) {
         List<AiChatMessage> messages = validateMessages(requestedMessages);
-        return complete(messages, buildSystemPrompt(systemContext), AiCallScene.KNOWLEDGE_RAG, null);
+        return complete(messages, buildSystemPrompt(systemContext), AiCallScene.KNOWLEDGE_RAG, context);
     }
 
     /** 供 BI 等内部编排使用固定系统提示词，提示词不从 HTTP 请求直接接收。 */
-    @Transactional(readOnly = true)
-    public AiChatResult chatWithSystemPrompt(List<AiChatMessage> requestedMessages, String systemPrompt) {
-        return chatWithSystemPrompt(requestedMessages, systemPrompt, null);
-    }
-
     @Transactional(readOnly = true)
     public AiChatResult chatWithSystemPrompt(List<AiChatMessage> requestedMessages, String systemPrompt,
                                              AiCallContext context) {
@@ -84,11 +75,14 @@ public class AiChatService {
 
     private AiChatResult complete(List<AiChatMessage> messages, String systemPrompt, AiCallScene scene,
                                   AiCallContext context) {
-        AiModelConfig config = repository.findActive(AiModelType.CHAT)
+        if (context == null) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "AI 调用缺少用户上下文");
+        }
+        AiModelConfig config = repository.findActiveForOwner(AiModelType.CHAT, context.userId())
                 .filter(AiModelConfig::enabled)
-                .orElseThrow(() -> new BusinessException(ErrorCode.AI_MODEL_NOT_CONFIGURED));
-        log.info("AI 对话开始：配置ID={}，供应商={}，模型={}，消息数量={}",
-                config.id(), config.provider(), config.modelName(), messages.size());
+                .orElseThrow(() -> new BusinessException(ErrorCode.AI_USER_MODEL_NOT_CONFIGURED));
+        log.info("AI 对话开始：用户ID={}，配置ID={}，供应商={}，模型={}，消息数量={}",
+                context.userId(), config.id(), config.provider(), config.modelName(), messages.size());
         long startedAt = System.nanoTime();
         AiChatResult result;
         try {

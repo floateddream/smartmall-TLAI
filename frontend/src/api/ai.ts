@@ -253,18 +253,32 @@ export const aiApi = {
   listCapabilities: async () =>
     (await api.get<ApiResponse<AiCapability[]>>('/ai/capabilities')).data.data,
   listProviders: async () =>
-    (await api.get<ApiResponse<AiProviderOption[]>>('/admin/ai/models/providers')).data.data,
+    (await api.get<ApiResponse<AiProviderOption[]>>('/ai/models/providers')).data.data,
   listModels: async () =>
-    (await api.get<ApiResponse<AiModelConfig[]>>('/admin/ai/models')).data.data,
+    (await api.get<ApiResponse<AiModelConfig[]>>('/ai/models')).data.data,
   createModel: async (input: AiModelConfigInput) =>
-    (await api.post<ApiResponse<AiModelConfig>>('/admin/ai/models', input)).data.data,
+    (await api.post<ApiResponse<AiModelConfig>>('/ai/models', input)).data.data,
   updateModel: async (id: number, input: AiModelConfigInput) =>
-    (await api.put<ApiResponse<AiModelConfig>>(`/admin/ai/models/${id}`, input)).data.data,
+    (await api.put<ApiResponse<AiModelConfig>>(`/ai/models/${id}`, input)).data.data,
   activateModel: async (id: number) =>
-    (await api.patch<ApiResponse<AiModelConfig>>(`/admin/ai/models/${id}/active`)).data.data,
+    (await api.patch<ApiResponse<AiModelConfig>>(`/ai/models/${id}/active`)).data.data,
   changeModelEnabled: async (id: number, enabled: boolean) =>
-    (await api.patch<ApiResponse<AiModelConfig>>(`/admin/ai/models/${id}/enabled`, { enabled })).data.data,
+    (await api.patch<ApiResponse<AiModelConfig>>(`/ai/models/${id}/enabled`, { enabled })).data.data,
   testModel: async (id: number) =>
+    (await api.post<ApiResponse<{ success: boolean; reply: string }>>(`/ai/models/${id}/test`, undefined, { timeout: 130000 })).data.data,
+  listSystemProviders: async () =>
+    (await api.get<ApiResponse<AiProviderOption[]>>('/admin/ai/models/providers')).data.data,
+  listSystemModels: async () =>
+    (await api.get<ApiResponse<AiModelConfig[]>>('/admin/ai/models')).data.data,
+  createSystemModel: async (input: AiModelConfigInput) =>
+    (await api.post<ApiResponse<AiModelConfig>>('/admin/ai/models', input)).data.data,
+  updateSystemModel: async (id: number, input: AiModelConfigInput) =>
+    (await api.put<ApiResponse<AiModelConfig>>(`/admin/ai/models/${id}`, input)).data.data,
+  activateSystemModel: async (id: number) =>
+    (await api.patch<ApiResponse<AiModelConfig>>(`/admin/ai/models/${id}/active`)).data.data,
+  changeSystemModelEnabled: async (id: number, enabled: boolean) =>
+    (await api.patch<ApiResponse<AiModelConfig>>(`/admin/ai/models/${id}/enabled`, { enabled })).data.data,
+  testSystemModel: async (id: number) =>
     (await api.post<ApiResponse<{ success: boolean; reply: string }>>(`/admin/ai/models/${id}/test`, undefined, { timeout: 130000 })).data.data,
   chat: async (messages: AiChatMessage[], knowledgeEnabled = false, agentEnabled = false) =>
     (await api.post<ApiResponse<AiChatReply>>('/ai/chat', {

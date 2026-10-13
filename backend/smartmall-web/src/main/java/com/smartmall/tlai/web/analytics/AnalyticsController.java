@@ -69,7 +69,7 @@ public class AnalyticsController {
             @AuthenticationPrincipal AppUserPrincipal principal) {
         long startedAt = System.nanoTime();
         try {
-            NaturalLanguageAnalyticsResult result = naturalLanguageService.analyze(request.question());
+            NaturalLanguageAnalyticsResult result = naturalLanguageService.analyze(request.question(), principal.id());
             auditSuccess(principal, "NATURAL_LANGUAGE", request.question(), result.analytics(),
                     result.modelName(), result.latencyMs());
             return ApiResponse.success(NaturalLanguageAnalyticsResponse.from(result));

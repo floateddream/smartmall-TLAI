@@ -138,6 +138,11 @@ public class ReadOnlyAgentService {
 
     public AgentChatResult chat(List<AiChatMessage> messages, AgentUserContext user,
                                 AgentConversationState conversationState, AiCallContext callContext) {
+        AiCallContext effectiveCallContext = callContext == null
+                ? new AiCallContext(user.userId(), null, null) : callContext;
+        if (effectiveCallContext.userId() != user.userId()) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "AI 调用用户上下文不一致");
+        }
         long startedAt = System.nanoTime();
         String latestUserMessage = latestUserMessage(messages);
         if (isAmbiguousRepeatRequest(latestUserMessage)) {
@@ -146,7 +151,7 @@ public class ReadOnlyAgentService {
         List<AiChatMessage> planningMessages = withConversationState(messages, conversationState);
         AiChatResult planResponse = chatWithSystemPrompt(planningMessages,
                 PLANNER_PROMPT.formatted(LocalDate.now(BUSINESS_ZONE),
-                        capabilityRegistry.plannerInstructions(user)), callContext);
+                        capabilityRegistry.plannerInstructions(user)), effectiveCallContext);
         AgentPlan plan;
         try {
             plan = parsePlan(planResponse.content());
@@ -158,7 +163,7 @@ public class ReadOnlyAgentService {
         }
         if (plan.action() == AgentAction.DIRECT) {
             AiChatResult answer = chatWithSystemPrompt(messages,
-                    DIRECT_PROMPT.formatted(capabilityRegistry.describeAvailable(user)), callContext);
+                    DIRECT_PROMPT.formatted(capabilityRegistry.describeAvailable(user)), effectiveCallContext);
             return new AgentChatResult(answer.content(), answer.modelName(), elapsedMs(startedAt),
                     List.of(), null, capabilityRegistry.suggestionsFor(user, "generalChat", 3),
                     AgentResponseType.ANSWER, List.of());
@@ -204,9 +209,9 @@ public class ReadOnlyAgentService {
             }
             ToolOutput output = execute(plan.intent(), plan.arguments());
             long toolLatencyMs = elapsedMs(toolStartedAt);
-            safeAudit(user, plan.intent(), argumentsJson, "SUCCESS", toolLatencyMs, null, callContext);
+            safeAudit(user, plan.intent(), argumentsJson, "SUCCESS", toolLatencyMs, null, effectiveCallContext);
             AiChatResult answer = chatWithSystemPrompt(messages,
-                    ANSWER_PROMPT.formatted(plan.intent(), truncate(output.json())), callContext);
+                    ANSWER_PROMPT.formatted(plan.intent(), truncate(output.json())), effectiveCallContext);
             AgentToolExecution trace = new AgentToolExecution(plan.intent(), definition.displayName(),
                     output.summary(), toolLatencyMs,
                     AgentToolNavigationFactory.create(plan.intent(), plan.arguments()));
@@ -219,7 +224,7 @@ public class ReadOnlyAgentService {
             long toolLatencyMs = elapsedMs(toolStartedAt);
             String errorCode = exception instanceof BusinessException business
                     ? business.getErrorCode().code() : ErrorCode.INTERNAL_ERROR.code();
-            safeAudit(user, plan.intent(), argumentsJson, "FAILED", toolLatencyMs, errorCode, callContext);
+            safeAudit(user, plan.intent(), argumentsJson, "FAILED", toolLatencyMs, errorCode, effectiveCallContext);
             log.warn("Agent 工具执行失败：工具={}，用户ID={}，错误码={}",
                     plan.intent(), user.userId(), errorCode);
             if (exception instanceof BusinessException business
@@ -348,9 +353,7 @@ public class ReadOnlyAgentService {
 
     private AiChatResult chatWithSystemPrompt(List<AiChatMessage> messages, String systemPrompt,
                                               AiCallContext callContext) {
-        return callContext == null
-                ? aiChatService.chatWithSystemPrompt(messages, systemPrompt)
-                : aiChatService.chatWithSystemPrompt(messages, systemPrompt, callContext);
+        return aiChatService.chatWithSystemPrompt(messages, systemPrompt, callContext);
     }
 
     private static void requireFields(JsonNode node, String... required) {

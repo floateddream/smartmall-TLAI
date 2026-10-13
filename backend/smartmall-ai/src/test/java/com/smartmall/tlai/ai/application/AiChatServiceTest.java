@@ -40,6 +40,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AiChatServiceTest {
+    private static final long USER_ID = 1L;
+
     @Mock AiModelConfigRepository repository;
     @Mock AiChatGateway gateway;
     @Mock AiCallLogService callLogService;
@@ -57,44 +59,52 @@ class AiChatServiceTest {
     @Test
     void shouldUseActiveModelForChat() {
         AiModelConfig config = model(true, true);
-        when(repository.findActive(AiModelType.CHAT)).thenReturn(Optional.of(config));
+        AiCallContext context = context();
+        when(repository.findActiveForOwner(AiModelType.CHAT, USER_ID)).thenReturn(Optional.of(config));
         when(gateway.complete(any(), anyList(), anyString(), anyString(), any()))
                 .thenReturn(new AiChatResult("处理建议", "test-model", 120));
 
-        AiChatResult result = service.chat(List.of(new AiChatMessage(AiMessageRole.USER, "分析退款问题")));
+        AiChatResult result = service.chat(
+                List.of(new AiChatMessage(AiMessageRole.USER, "分析退款问题")), context);
 
         assertThat(result.content()).isEqualTo("处理建议");
         assertThat(result.modelName()).isEqualTo("test-model");
         verify(callLogService).record(eq(config), eq(AiCallScene.ASSISTANT_CHAT), eq(AiCallStatus.SUCCESS),
-                anyLong(), eq(1), anyLong(), eq(1), eq(4L), eq(null), eq(null));
+                anyLong(), eq(1), anyLong(), eq(1), eq(4L), eq(null), eq(context));
     }
 
     @Test
     void shouldRejectChatWithoutActiveModel() {
-        when(repository.findActive(AiModelType.CHAT)).thenReturn(Optional.empty());
+        when(repository.findActiveForOwner(AiModelType.CHAT, USER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.chat(List.of(new AiChatMessage(AiMessageRole.USER, "你好"))))
+        assertThatThrownBy(() -> service.chat(
+                List.of(new AiChatMessage(AiMessageRole.USER, "你好")), context()))
                 .isInstanceOfSatisfying(BusinessException.class,
-                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.AI_MODEL_NOT_CONFIGURED));
+                        error -> assertThat(error.getErrorCode())
+                                .isEqualTo(ErrorCode.AI_USER_MODEL_NOT_CONFIGURED));
     }
 
     @Test
     void shouldRecordFailedProviderCallWithoutSensitiveContent() {
         AiModelConfig config = model(true, true);
-        when(repository.findActive(AiModelType.CHAT)).thenReturn(Optional.of(config));
+        AiCallContext context = context();
+        when(repository.findActiveForOwner(AiModelType.CHAT, USER_ID)).thenReturn(Optional.of(config));
         when(gateway.complete(any(), anyList(), anyString(), anyString(), any()))
                 .thenThrow(new BusinessException(ErrorCode.AI_PROVIDER_ERROR));
 
-        assertThatThrownBy(() -> service.chat(List.of(new AiChatMessage(AiMessageRole.USER, "敏感业务问题"))))
+        assertThatThrownBy(() -> service.chat(
+                List.of(new AiChatMessage(AiMessageRole.USER, "敏感业务问题")), context))
                 .isInstanceOf(BusinessException.class);
 
         verify(callLogService).record(eq(config), eq(AiCallScene.ASSISTANT_CHAT), eq(AiCallStatus.FAILED),
-                anyLong(), eq(1), anyLong(), eq(0), eq(null), eq(ErrorCode.AI_PROVIDER_ERROR.code()), eq(null));
+                anyLong(), eq(1), anyLong(), eq(0), eq(null),
+                eq(ErrorCode.AI_PROVIDER_ERROR.code()), eq(context));
     }
 
     @Test
     void shouldRequireLastMessageFromUser() {
-        assertThatThrownBy(() -> service.chat(List.of(new AiChatMessage(AiMessageRole.ASSISTANT, "上一条回复"))))
+        assertThatThrownBy(() -> service.chat(
+                List.of(new AiChatMessage(AiMessageRole.ASSISTANT, "上一条回复")), context()))
                 .isInstanceOfSatisfying(BusinessException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
     }
@@ -102,8 +112,9 @@ class AiChatServiceTest {
     @Test
     void shouldPropagateSafeCallContextToAuditLog() {
         AiModelConfig config = model(true, true);
-        AiCallContext context = new AiCallContext("123e4567-e89b-42d3-a456-426614174000", 21L);
-        when(repository.findActive(AiModelType.CHAT)).thenReturn(Optional.of(config));
+        AiCallContext context = new AiCallContext(
+                USER_ID, "123e4567-e89b-42d3-a456-426614174000", 21L);
+        when(repository.findActiveForOwner(AiModelType.CHAT, USER_ID)).thenReturn(Optional.of(config));
         when(gateway.complete(any(), anyList(), anyString(), anyString(), any()))
                 .thenReturn(new AiChatResult("完成", "test-model", 10));
 
@@ -118,6 +129,10 @@ class AiChatServiceTest {
         return new AiModelConfig(1L, "测试模型", AiModelType.CHAT,
                 AiProvider.OPENAI_COMPATIBLE, "https://example.com/v1",
                 "test-model", credentialCipher.encrypt("test-key"), BigDecimal.valueOf(0.7), 1024,
-                null, active, enabled, 1L, 1L, now, now);
+                null, active, enabled, USER_ID, 1L, 1L, now, now);
+    }
+
+    private AiCallContext context() {
+        return new AiCallContext(USER_ID, null, null);
     }
 }

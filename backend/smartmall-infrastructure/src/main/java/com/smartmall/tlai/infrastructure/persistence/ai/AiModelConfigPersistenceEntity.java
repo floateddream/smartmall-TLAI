@@ -22,6 +22,7 @@ public class AiModelConfigPersistenceEntity {
     private Integer embeddingDimensions;
     private Boolean active;
     private Boolean enabled;
+    private Long ownerUserId;
     private Long createdBy;
     private Long updatedBy;
     private OffsetDateTime createdAt;
@@ -51,6 +52,8 @@ public class AiModelConfigPersistenceEntity {
     public void setActive(Boolean active) { this.active = active; }
     public Boolean getEnabled() { return enabled; }
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public Long getOwnerUserId() { return ownerUserId; }
+    public void setOwnerUserId(Long ownerUserId) { this.ownerUserId = ownerUserId; }
     public Long getCreatedBy() { return createdBy; }
     public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
     public Long getUpdatedBy() { return updatedBy; }

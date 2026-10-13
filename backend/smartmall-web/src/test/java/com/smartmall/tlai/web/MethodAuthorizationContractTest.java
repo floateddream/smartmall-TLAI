@@ -6,6 +6,7 @@ import com.smartmall.tlai.web.ai.AiCallLogController;
 import com.smartmall.tlai.web.ai.AiChatController;
 import com.smartmall.tlai.web.ai.AiConversationController;
 import com.smartmall.tlai.web.ai.AiModelConfigController;
+import com.smartmall.tlai.web.ai.PersonalAiModelConfigController;
 import com.smartmall.tlai.web.analytics.AnalyticsController;
 import com.smartmall.tlai.web.customer.CustomerController;
 import com.smartmall.tlai.web.dashboard.DashboardController;
@@ -28,6 +29,7 @@ class MethodAuthorizationContractTest {
     private static final List<Class<?>> PROTECTED_CONTROLLERS = List.of(
             AccessControlController.class, AgentAuditController.class, AiCallLogController.class,
             AiChatController.class, AiConversationController.class, AiModelConfigController.class,
+            PersonalAiModelConfigController.class,
             AnalyticsController.class, CustomerController.class, DashboardController.class,
             KnowledgeDocumentController.class, OrderController.class, ProductController.class,
             RefundController.class, TicketController.class);
@@ -52,5 +54,10 @@ class MethodAuthorizationContractTest {
 
         assertThat(annotation).isNotNull();
         assertThat(annotation.value()).isEqualTo("hasAuthority('system:model_manage')");
+
+        PreAuthorize personalAnnotation = AnnotatedElementUtils.findMergedAnnotation(
+                PersonalAiModelConfigController.class, PreAuthorize.class);
+        assertThat(personalAnnotation).isNotNull();
+        assertThat(personalAnnotation.value()).isEqualTo("hasAuthority('ai:chat')");
     }
 }

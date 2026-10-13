@@ -50,17 +50,32 @@ public class AiModelConfigService {
     }
 
     @Transactional(readOnly = true)
-    public List<AiModelConfig> list() {
-        return repository.findAll();
+    public List<AiModelConfig> listPersonal(long ownerUserId) {
+        return repository.findByOwner(ownerUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AiModelConfig> listSystem() {
+        return repository.findSystem();
     }
 
     @Transactional
-    public AiModelConfig create(AiModelCommand command) {
+    public AiModelConfig createPersonal(AiModelCommand command, long ownerUserId) {
+        return create(command, ownerUserId, AiModelType.CHAT);
+    }
+
+    @Transactional
+    public AiModelConfig createSystem(AiModelCommand command) {
+        return create(command, null, AiModelType.EMBEDDING);
+    }
+
+    private AiModelConfig create(AiModelCommand command, Long ownerUserId, AiModelType requiredType) {
         String name = requireText(command.name(), "配置名称不能为空");
-        if (repository.findByName(name).isPresent()) {
+        if (repository.findByName(name, ownerUserId).isPresent()) {
             throw new BusinessException(ErrorCode.AI_MODEL_NAME_EXISTS);
         }
         AiModelType modelType = requireModelType(command.modelType());
+        requireScopeType(modelType, requiredType);
         AiProvider provider = requireProvider(command.provider());
         requireProviderSupports(provider, modelType);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -69,20 +84,31 @@ public class AiModelConfigService {
                 encryptCredential(command.apiKey(), provider),
                 requireTemperature(command.temperature()), requireMaxTokens(command.maxTokens()),
                 requireEmbeddingDimensions(command.embeddingDimensions(), modelType), false, true,
-                command.operatorId(), command.operatorId(), now, now));
-        log.info("AI 模型配置创建成功：配置ID={}，名称={}，类型={}，供应商={}，模型={}，操作人ID={}",
-                created.id(), created.name(), created.modelType(), created.provider(), created.modelName(), command.operatorId());
+                ownerUserId, command.operatorId(), command.operatorId(), now, now));
+        log.info("AI 模型配置创建成功：配置ID={}，名称={}，类型={}，归属用户ID={}，供应商={}，模型={}，操作人ID={}",
+                created.id(), created.name(), created.modelType(), ownerUserId,
+                created.provider(), created.modelName(), command.operatorId());
         return created;
     }
 
     @Transactional
-    public AiModelConfig update(long id, AiModelCommand command) {
-        AiModelConfig current = requireConfig(id);
+    public AiModelConfig updatePersonal(long id, AiModelCommand command, long ownerUserId) {
+        return update(requirePersonalConfig(id, ownerUserId), command, AiModelType.CHAT);
+    }
+
+    @Transactional
+    public AiModelConfig updateSystem(long id, AiModelCommand command) {
+        return update(requireSystemConfig(id), command, AiModelType.EMBEDDING);
+    }
+
+    private AiModelConfig update(AiModelConfig current, AiModelCommand command, AiModelType requiredType) {
+        long id = current.id();
         String name = requireText(command.name(), "配置名称不能为空");
-        repository.findByName(name).filter(found -> !found.id().equals(id)).ifPresent(found -> {
+        repository.findByName(name, current.ownerUserId()).filter(found -> !found.id().equals(id)).ifPresent(found -> {
             throw new BusinessException(ErrorCode.AI_MODEL_NAME_EXISTS);
         });
         AiModelType modelType = requireModelType(command.modelType());
+        requireScopeType(modelType, requiredType);
         AiProvider provider = requireProvider(command.provider());
         requireProviderSupports(provider, modelType);
         if (current.active() && current.modelType() != modelType) {
@@ -104,7 +130,7 @@ public class AiModelConfigService {
                 apiKeyCiphertext,
                 requireTemperature(command.temperature()), requireMaxTokens(command.maxTokens()),
                 requireEmbeddingDimensions(command.embeddingDimensions(), modelType), current.active(), current.enabled(),
-                current.createdBy(), command.operatorId(), current.createdAt(), now));
+                current.ownerUserId(), current.createdBy(), command.operatorId(), current.createdAt(), now));
         log.info("AI 模型配置更新成功：配置ID={}，名称={}，类型={}，供应商={}，模型={}，密钥是否变更={}，操作人ID={}",
                 updated.id(), updated.name(), updated.modelType(), updated.provider(), updated.modelName(),
                 command.apiKey() != null && !command.apiKey().isBlank(), command.operatorId());
@@ -112,9 +138,17 @@ public class AiModelConfigService {
     }
 
     @Transactional
-    public AiModelConfig activate(long id, long operatorId) {
+    public AiModelConfig activatePersonal(long id, long ownerUserId) {
+        return activate(requirePersonalConfig(id, ownerUserId), ownerUserId);
+    }
+
+    @Transactional
+    public AiModelConfig activateSystem(long id, long operatorId) {
+        return activate(requireSystemConfig(id), operatorId);
+    }
+
+    private AiModelConfig activate(AiModelConfig config, long operatorId) {
         repository.lockConfiguration();
-        AiModelConfig config = requireConfig(id);
         if (!config.enabled()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "停用的模型不能设为当前模型");
         }
@@ -122,28 +156,46 @@ public class AiModelConfigService {
             throw new BusinessException(ErrorCode.AI_CREDENTIAL_MISSING, "请先为该模型配置 API Key");
         }
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        repository.clearActive(config.modelType(), now, operatorId);
-        repository.updateActive(id, true, now, operatorId);
-        AiModelConfig activated = requireConfig(id);
-        log.info("AI 模型已激活：配置ID={}，类型={}，供应商={}，模型={}，操作人ID={}",
-                activated.id(), activated.modelType(), activated.provider(), activated.modelName(), operatorId);
+        repository.clearActive(config.modelType(), config.ownerUserId(), now, operatorId);
+        repository.updateActive(config.id(), true, now, operatorId);
+        AiModelConfig activated = requireConfig(config.id());
+        log.info("AI 模型已激活：配置ID={}，类型={}，归属用户ID={}，供应商={}，模型={}，操作人ID={}",
+                activated.id(), activated.modelType(), activated.ownerUserId(),
+                activated.provider(), activated.modelName(), operatorId);
         return activated;
     }
 
     @Transactional
-    public AiModelConfig changeEnabled(long id, boolean enabled, long operatorId) {
+    public AiModelConfig changePersonalEnabled(long id, boolean enabled, long ownerUserId) {
+        return changeEnabled(requirePersonalConfig(id, ownerUserId), enabled, ownerUserId);
+    }
+
+    @Transactional
+    public AiModelConfig changeSystemEnabled(long id, boolean enabled, long operatorId) {
+        return changeEnabled(requireSystemConfig(id), enabled, operatorId);
+    }
+
+    private AiModelConfig changeEnabled(AiModelConfig config, boolean enabled, long operatorId) {
         repository.lockConfiguration();
-        requireConfig(id);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        repository.updateEnabled(id, enabled, now, operatorId);
-        AiModelConfig changed = requireConfig(id);
-        log.info("AI 模型启用状态已变更：配置ID={}，是否启用={}，操作人ID={}", id, enabled, operatorId);
+        repository.updateEnabled(config.id(), enabled, now, operatorId);
+        AiModelConfig changed = requireConfig(config.id());
+        log.info("AI 模型启用状态已变更：配置ID={}，归属用户ID={}，是否启用={}，操作人ID={}",
+                config.id(), config.ownerUserId(), enabled, operatorId);
         return changed;
     }
 
     @Transactional(readOnly = true)
-    public String test(long id) {
-        AiModelConfig config = requireConfig(id);
+    public String testPersonal(long id, long ownerUserId) {
+        return test(requirePersonalConfig(id, ownerUserId));
+    }
+
+    @Transactional(readOnly = true)
+    public String testSystem(long id) {
+        return test(requireSystemConfig(id));
+    }
+
+    private String test(AiModelConfig config) {
         log.info("AI 模型连通性测试开始：配置ID={}，类型={}，供应商={}，模型={}",
                 config.id(), config.modelType(), config.provider(), config.modelName());
         long startedAt = System.nanoTime();
@@ -191,6 +243,30 @@ public class AiModelConfigService {
 
     private AiModelConfig requireConfig(long id) {
         return repository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.AI_MODEL_NOT_FOUND));
+    }
+
+    private AiModelConfig requirePersonalConfig(long id, long ownerUserId) {
+        AiModelConfig config = requireConfig(id);
+        if (config.modelType() != AiModelType.CHAT || config.ownerUserId() == null
+                || config.ownerUserId() != ownerUserId) {
+            throw new BusinessException(ErrorCode.AI_MODEL_NOT_FOUND);
+        }
+        return config;
+    }
+
+    private AiModelConfig requireSystemConfig(long id) {
+        AiModelConfig config = requireConfig(id);
+        if (config.modelType() != AiModelType.EMBEDDING || config.ownerUserId() != null) {
+            throw new BusinessException(ErrorCode.AI_MODEL_NOT_FOUND);
+        }
+        return config;
+    }
+
+    private static void requireScopeType(AiModelType actual, AiModelType required) {
+        if (actual != required) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    required == AiModelType.CHAT ? "个人模型只能配置聊天模型" : "系统模型只能配置 Embedding 模型");
+        }
     }
 
     private static AiProvider requireProvider(AiProvider provider) {

@@ -5,6 +5,7 @@ import com.smartmall.tlai.agent.application.PendingAgentActionService;
 import com.smartmall.tlai.agent.application.AgentCapabilityRegistry;
 import com.smartmall.tlai.agent.model.AgentUserContext;
 import com.smartmall.tlai.ai.application.AiChatService;
+import com.smartmall.tlai.ai.model.AiCallContext;
 import com.smartmall.tlai.common.api.ApiResponse;
 import com.smartmall.tlai.rag.application.RagChatService;
 import com.smartmall.tlai.security.AppUserPrincipal;
@@ -58,12 +59,14 @@ public class AiChatController {
     public ApiResponse<AiChatResponse> chat(@Valid @RequestBody AiChatRequest request,
                                             @AuthenticationPrincipal AppUserPrincipal principal) {
         var messages = request.messages().stream().map(AiChatMessageRequest::toDomain).toList();
+        AgentUserContext user = userContext(principal);
         if (request.agentEnabled()) {
-            return ApiResponse.success(AiChatResponse.from(agentService.chat(messages, userContext(principal))));
+            return ApiResponse.success(AiChatResponse.from(agentService.chat(messages, user)));
         }
+        AiCallContext callContext = new AiCallContext(principal.id(), null, null);
         return ApiResponse.success(request.knowledgeEnabled()
-                ? AiChatResponse.from(ragService.chat(messages))
-                : AiChatResponse.from(service.chat(messages)));
+                ? AiChatResponse.from(ragService.chat(messages, callContext))
+                : AiChatResponse.from(service.chat(messages, callContext)));
     }
 
     @PostMapping("/agent/confirm")

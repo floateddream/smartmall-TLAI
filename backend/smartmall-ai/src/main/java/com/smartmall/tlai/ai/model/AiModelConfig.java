@@ -16,6 +16,7 @@ public record AiModelConfig(
         Integer embeddingDimensions,
         boolean active,
         boolean enabled,
+        Long ownerUserId,
         Long createdBy,
         Long updatedBy,
         OffsetDateTime createdAt,

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.smartmall.tlai.ai.application.AiChatService;
 import com.smartmall.tlai.ai.model.AiChatMessage;
 import com.smartmall.tlai.ai.model.AiChatResult;
+import com.smartmall.tlai.ai.model.AiCallContext;
 import com.smartmall.tlai.ai.model.AiMessageRole;
 import com.smartmall.tlai.analytics.model.AnalyticsDimension;
 import com.smartmall.tlai.analytics.model.AnalyticsGranularity;
@@ -26,6 +27,7 @@ import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class NaturalLanguageAnalyticsService {
@@ -75,13 +77,15 @@ public class NaturalLanguageAnalyticsService {
         this.objectMapper = objectMapper;
     }
 
-    public NaturalLanguageAnalyticsResult analyze(String requestedQuestion) {
+    public NaturalLanguageAnalyticsResult analyze(String requestedQuestion, long userId) {
         String question = validateQuestion(requestedQuestion);
+        AiCallContext callContext = new AiCallContext(userId, UUID.randomUUID().toString(), null);
         long startedAt = System.nanoTime();
         LocalDate today = LocalDate.now(BUSINESS_ZONE);
         log.info("自然语言数据分析开始：问题长度={}", question.length());
         AiChatResult planResponse = aiChatService.chatWithSystemPrompt(
-                List.of(new AiChatMessage(AiMessageRole.USER, question)), PLANNER_PROMPT.formatted(today));
+                List.of(new AiChatMessage(AiMessageRole.USER, question)),
+                PLANNER_PROMPT.formatted(today), callContext);
         AnalyticsQuery query = parsePlan(planResponse.content());
         log.info("AI 数据分析计划校验通过：指标={}，维度={}，时间粒度={}，开始日期={}，结束日期={}，返回条数={}",
                 query.metric(), query.dimension(), query.granularity(), query.startDate(), query.endDate(), query.limit());
@@ -91,7 +95,7 @@ public class NaturalLanguageAnalyticsService {
         String resultJson = serializeAnalytics(analytics);
         AiChatResult explanation = aiChatService.chatWithSystemPrompt(
                 List.of(new AiChatMessage(AiMessageRole.USER, question)),
-                EXPLANATION_PROMPT.formatted(resultJson));
+                EXPLANATION_PROMPT.formatted(resultJson), callContext);
         long latencyMs = (System.nanoTime() - startedAt) / 1_000_000;
         log.info("自然语言数据分析成功：指标={}，维度={}，数据点数量={}，模型={}，耗时毫秒={}",
                 query.metric(), query.dimension(), analytics.points().size(), explanation.modelName(), latencyMs);

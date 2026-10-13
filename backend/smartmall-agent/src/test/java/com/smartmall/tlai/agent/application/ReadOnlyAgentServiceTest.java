@@ -6,6 +6,7 @@ import com.smartmall.tlai.agent.model.AgentUserContext;
 import com.smartmall.tlai.agent.model.AgentPendingAction;
 import com.smartmall.tlai.agent.model.AgentResponseType;
 import com.smartmall.tlai.ai.application.AiChatService;
+import com.smartmall.tlai.ai.model.AiCallContext;
 import com.smartmall.tlai.ai.model.AiChatMessage;
 import com.smartmall.tlai.ai.model.AiChatResult;
 import com.smartmall.tlai.ai.model.AiMessageRole;
@@ -28,6 +29,7 @@ import java.time.OffsetDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -50,7 +52,7 @@ class ReadOnlyAgentServiceTest {
 
     @Test
     void executesPermittedOrderQueryAndReturnsTrace() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"TOOL_CALL","intent":"queryOrder","arguments":{"id":null,"keyword":"SM2026","status":""},"missingFields":[]}
                         """, "planner", 20))
@@ -71,12 +73,12 @@ class ReadOnlyAgentServiceTest {
         verify(auditService).record(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.eq("queryOrder"), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.eq("SUCCESS"), org.mockito.ArgumentMatchers.anyLong(),
-                org.mockito.ArgumentMatchers.isNull());
+                org.mockito.ArgumentMatchers.isNull(), any(AiCallContext.class));
     }
 
     @Test
     void rejectsToolWhenCurrentUserLacksPermission() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"TOOL_CALL","intent":"queryRefund","arguments":{"id":null,"keyword":"RF","status":""},"missingFields":[]}
                         """, "planner", 20));
@@ -90,12 +92,12 @@ class ReadOnlyAgentServiceTest {
         verify(auditService).record(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.eq("queryRefund"), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.eq("FAILED"), org.mockito.ArgumentMatchers.anyLong(),
-                org.mockito.ArgumentMatchers.eq("FORBIDDEN"));
+                org.mockito.ArgumentMatchers.eq("FORBIDDEN"), any(AiCallContext.class));
     }
 
     @Test
     void convertsUnknownToolFromModelToSafeClarification() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"TOOL_CALL","intent":"deleteOrder","arguments":{},"missingFields":[]}
                         """, "planner", 20));
@@ -110,7 +112,7 @@ class ReadOnlyAgentServiceTest {
 
     @Test
     void createsConfirmationPlanWithoutExecutingTicketWrite() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"ACTION_PLAN","intent":"createAfterSalesTicket","arguments":{"orderId":12,"orderNo":null,"category":"LOGISTICS","priority":"NORMAL","subject":"物流停滞","description":"三天没有更新"},"missingFields":[]}
                         """, "planner", 20));
@@ -128,7 +130,7 @@ class ReadOnlyAgentServiceTest {
 
     @Test
     void convertsInvalidWritePlanToGuidanceInsteadOfTechnicalError() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"ACTION_PLAN","intent":"createAfterSalesTicket","arguments":{"orderId":null,"orderNo":"","category":"LOGISTICS","priority":"NORMAL","subject":"","description":""},"missingFields":[]}
                         """, "planner", 20));
@@ -146,7 +148,7 @@ class ReadOnlyAgentServiceTest {
 
     @Test
     void returnsDeterministicGuidanceWhenWriteParametersAreMissing() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"CLARIFY","intent":"createAfterSalesTicket","arguments":{},"missingFields":["orderNo","subject","description"]}
                         """, "planner", 20));
@@ -168,7 +170,7 @@ class ReadOnlyAgentServiceTest {
 
     @Test
     void injectsPreviousParameterStateIntoLatestUserMessage() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"CLARIFY","intent":"createAfterSalesTicket","arguments":{"orderNo":"SM20260001"},"missingFields":["subject","description"]}
                         """, "planner", 20));
@@ -184,12 +186,12 @@ class ReadOnlyAgentServiceTest {
             return content.contains("[系统维护的多轮参数状态]")
                     && content.contains("SM20260001")
                     && content.contains("subject,description");
-        }), anyString());
+        }), anyString(), any(AiCallContext.class));
     }
 
     @Test
     void completedActionPlanDoesNotRetainConversationState() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"ACTION_PLAN","intent":"createAfterSalesTicket","arguments":{"orderId":null,"orderNo":"SM20260001","category":"LOGISTICS","priority":"NORMAL","subject":"物流停滞","description":"三天没有更新"},"missingFields":[]}
                         """, "planner", 20));
@@ -219,7 +221,7 @@ class ReadOnlyAgentServiceTest {
 
     @Test
     void explainsUnsupportedOperationWithoutThrowingBusinessError() {
-        when(aiChatService.chatWithSystemPrompt(anyList(), anyString()))
+        when(aiChatService.chatWithSystemPrompt(anyList(), anyString(), any(AiCallContext.class)))
                 .thenReturn(new AiChatResult("""
                         {"action":"UNSUPPORTED","intent":"approveRefund","arguments":{},"missingFields":[]}
                         """, "planner", 20));

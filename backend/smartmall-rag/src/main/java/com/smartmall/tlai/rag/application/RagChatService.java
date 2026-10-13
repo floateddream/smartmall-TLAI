@@ -3,6 +3,7 @@ package com.smartmall.tlai.rag.application;
 import com.smartmall.tlai.ai.application.AiChatService;
 import com.smartmall.tlai.ai.model.AiChatMessage;
 import com.smartmall.tlai.ai.model.AiChatResult;
+import com.smartmall.tlai.ai.model.AiCallContext;
 import com.smartmall.tlai.ai.model.AiMessageRole;
 import com.smartmall.tlai.common.error.BusinessException;
 import com.smartmall.tlai.common.error.ErrorCode;
@@ -42,7 +43,7 @@ public class RagChatService {
         this.properties = properties;
     }
 
-    public RagChatResult chat(List<AiChatMessage> messages) {
+    public RagChatResult chat(List<AiChatMessage> messages, AiCallContext callContext) {
         String query = lastUserMessage(messages);
         long startedAt = System.nanoTime();
         List<KnowledgeSearchHit> hits = searchService.search(
@@ -55,7 +56,7 @@ public class RagChatService {
         }
 
         ContextBundle bundle = buildContext(hits);
-        AiChatResult answer = chatService.chatWithContext(messages, bundle.systemContext());
+        AiChatResult answer = chatService.chatWithContext(messages, bundle.systemContext(), callContext);
         long totalLatencyMs = (System.nanoTime() - startedAt) / 1_000_000;
         log.info("RAG 对话成功：知识来源数量={}，模型={}，总耗时毫秒={}",
                 bundle.sources().size(), answer.modelName(), totalLatencyMs);

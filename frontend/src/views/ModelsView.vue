@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Check, CirclePower, Edit3, KeyRound, Plus, Radio, RefreshCw, ServerCog, TestTube2 } from 'lucide-vue-next'
 import { ElMessage } from 'element-plus'
 import {
@@ -12,6 +13,7 @@ import {
 } from '@/api/ai'
 
 const models = ref<AiModelConfig[]>([])
+const route = useRoute()
 const providers = ref<AiProviderOption[]>([])
 const loading = ref(false)
 const loadError = ref('')
@@ -32,8 +34,9 @@ const form = reactive<AiModelConfigInput>({
   embeddingDimensions: null,
 })
 
-const activeChatModel = computed(() => models.value.find(model => model.active && model.modelType === 'CHAT'))
-const activeEmbeddingModel = computed(() => models.value.find(model => model.active && model.modelType === 'EMBEDDING'))
+const systemScope = computed(() => route.meta.modelScope === 'SYSTEM')
+const configuredType = computed<AiModelType>(() => systemScope.value ? 'EMBEDDING' : 'CHAT')
+const activeModel = computed(() => models.value.find(model => model.active))
 const credentialCount = computed(() => models.value.filter(model => model.credentialConfigured).length)
 const selectedProvider = computed(() => providers.value.find(provider => provider.code === form.provider))
 const availableProviders = computed(() => providers.value.filter(provider => provider.supportedTypes.includes(form.modelType)))
@@ -42,6 +45,7 @@ const modelOptions = computed(() => form.modelType === 'EMBEDDING'
   : selectedProvider.value?.chatModels ?? [])
 const credentialRequired = computed(() => selectedProvider.value?.credentialRequired ?? true)
 let modelRequestId = 0
+let providerRequestId = 0
 
 function reportError(action: string, error: unknown) {
   console.error(`[AI模型配置] ${action}失败`, error)
@@ -50,24 +54,31 @@ function reportError(action: string, error: unknown) {
 
 async function loadModels() {
   const currentRequest = ++modelRequestId
+  const requestedSystemScope = systemScope.value
   loading.value = true
   loadError.value = ''
   try {
-    const response = await aiApi.listModels()
-    if (currentRequest === modelRequestId) models.value = response
+    const response = requestedSystemScope ? await aiApi.listSystemModels() : await aiApi.listModels()
+    if (currentRequest === modelRequestId && requestedSystemScope === systemScope.value) models.value = response
   } catch (error) {
-    if (currentRequest !== modelRequestId) return
+    if (currentRequest !== modelRequestId || requestedSystemScope !== systemScope.value) return
     models.value = []
     loadError.value = error instanceof Error ? error.message : '模型列表加载失败'
   } finally {
-    if (currentRequest === modelRequestId) loading.value = false
+    if (currentRequest === modelRequestId && requestedSystemScope === systemScope.value) loading.value = false
   }
 }
 
 async function loadProviders() {
+  const currentRequest = ++providerRequestId
+  const requestedSystemScope = systemScope.value
   try {
-    providers.value = await aiApi.listProviders()
+    const response = requestedSystemScope ? await aiApi.listSystemProviders() : await aiApi.listProviders()
+    if (currentRequest === providerRequestId && requestedSystemScope === systemScope.value) {
+      providers.value = response
+    }
   } catch (error) {
+    if (currentRequest !== providerRequestId || requestedSystemScope !== systemScope.value) return
     loadError.value = error instanceof Error ? error.message : '供应商列表加载失败'
   }
 }
@@ -102,10 +113,9 @@ function providerName(code: AiProviderCode) {
 
 function openCreate() {
   editing.value = null
-  Object.assign(form, {
-    name: '', modelType: 'CHAT', provider: 'DEEPSEEK', baseUrl: 'https://api.deepseek.com/v1',
-    modelName: 'deepseek-chat', apiKey: '', temperature: 0.7, maxTokens: 2048, embeddingDimensions: null,
-  })
+  form.name = ''
+  form.modelType = configuredType.value
+  applyModelType(configuredType.value)
   dialogOpen.value = true
 }
 
@@ -151,7 +161,10 @@ async function save() {
     credentialChanged: Boolean(form.apiKey.trim()),
   })
   try {
-    if (editing.value) await aiApi.updateModel(editing.value.id, { ...form })
+    if (editing.value) {
+      if (systemScope.value) await aiApi.updateSystemModel(editing.value.id, { ...form })
+      else await aiApi.updateModel(editing.value.id, { ...form })
+    } else if (systemScope.value) await aiApi.createSystemModel({ ...form })
     else await aiApi.createModel({ ...form })
     ElMessage.success(editing.value ? '模型配置已更新' : '模型配置已创建')
     dialogOpen.value = false
@@ -168,7 +181,8 @@ async function activate(model: AiModelConfig) {
   actingId.value = model.id
   console.info('[AI模型配置] 开始激活模型', { id: model.id, provider: model.provider, model: model.modelName })
   try {
-    await aiApi.activateModel(model.id)
+    if (systemScope.value) await aiApi.activateSystemModel(model.id)
+    else await aiApi.activateModel(model.id)
     ElMessage.success(`已切换到 ${model.name}`)
     await loadModels()
   } catch (error) {
@@ -183,7 +197,8 @@ async function toggleEnabled(model: AiModelConfig) {
   actingId.value = model.id
   console.info('[AI模型配置] 开始切换启停状态', { id: model.id, enabled: !model.enabled })
   try {
-    await aiApi.changeModelEnabled(model.id, !model.enabled)
+    if (systemScope.value) await aiApi.changeSystemModelEnabled(model.id, !model.enabled)
+    else await aiApi.changeModelEnabled(model.id, !model.enabled)
     ElMessage.success(model.enabled ? '模型配置已停用' : '模型配置已启用')
     await loadModels()
   } catch (error) {
@@ -198,7 +213,9 @@ async function test(model: AiModelConfig) {
   testingId.value = model.id
   console.info('[AI模型配置] 开始测试连接', { id: model.id, provider: model.provider, model: model.modelName })
   try {
-    const result = await aiApi.testModel(model.id)
+    const result = systemScope.value
+      ? await aiApi.testSystemModel(model.id)
+      : await aiApi.testModel(model.id)
     ElMessage.success(`连接成功：${result.reply}`)
   } catch (error) {
     reportError('测试模型连接', error)
@@ -207,18 +224,24 @@ async function test(model: AiModelConfig) {
   }
 }
 
-onMounted(async () => {
+watch(() => route.meta.modelScope, async () => {
+  dialogOpen.value = false
+  editing.value = null
+  models.value = []
+  providers.value = []
+  form.modelType = configuredType.value
   await reload()
-})
+  applyModelType(configuredType.value)
+}, { immediate: true })
 </script>
 
 <template>
   <div class="models-view view-shell">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">SYSTEM / MODEL RUNTIME</p>
-        <h1>模型配置<span class="heading-spark">.</span></h1>
-        <p class="page-heading__subtitle">Chat & Embedding Runtime</p>
+        <p class="eyebrow">{{ systemScope ? 'SYSTEM / EMBEDDING RUNTIME' : 'PERSONAL / CHAT RUNTIME' }}</p>
+        <h1>{{ systemScope ? '系统模型' : '我的模型' }}<span class="heading-spark">.</span></h1>
+        <p class="page-heading__subtitle">{{ systemScope ? '知识库统一向量模型' : '仅当前账号使用的聊天模型与 API Key' }}</p>
       </div>
       <div class="page-heading__actions">
         <span class="demo-badge" :class="credentialCount > 0 ? 'demo-badge--success' : 'demo-badge--warning'">
@@ -229,10 +252,10 @@ onMounted(async () => {
     </div>
 
     <section class="model-runtime-strip">
-      <div><span>CHAT RUNTIME</span><strong>{{ activeChatModel?.name || '未选择' }}</strong></div>
-      <div><span>EMBEDDING RUNTIME</span><strong>{{ activeEmbeddingModel?.name || '未选择' }}</strong></div>
-      <div><span>VECTOR MODEL</span><strong class="mono">{{ activeEmbeddingModel?.modelName || '—' }}</strong></div>
-      <Radio :size="22" :class="{ 'runtime-pulse': activeChatModel || activeEmbeddingModel }" />
+      <div><span>{{ systemScope ? 'EMBEDDING RUNTIME' : 'CHAT RUNTIME' }}</span><strong>{{ activeModel?.name || '未选择' }}</strong></div>
+      <div><span>ACTIVE MODEL</span><strong class="mono">{{ activeModel?.modelName || '—' }}</strong></div>
+      <div><span>ACCESS SCOPE</span><strong>{{ systemScope ? 'SYSTEM' : 'CURRENT USER' }}</strong></div>
+      <Radio :size="22" :class="{ 'runtime-pulse': activeModel }" />
     </section>
 
     <div v-if="loadError" class="catalog-feedback catalog-feedback--error model-load-error" role="alert">{{ loadError }} <button type="button" class="text-link" :disabled="loading" @click="reload">重试</button></div>
@@ -262,7 +285,8 @@ onMounted(async () => {
         </footer>
       </article>
       <div v-if="!loading && models.length === 0" class="model-empty">
-        <ServerCog :size="34" /><strong>暂无模型配置</strong>
+        <ServerCog :size="34" /><strong>{{ systemScope ? '尚未配置系统向量模型' : '尚未配置个人聊天模型' }}</strong>
+        <span>{{ systemScope ? '知识库处理前需要配置并激活 Embedding 模型' : '新增并激活自己的模型后即可使用 AI 助手' }}</span>
       </div>
     </div>
 
@@ -270,10 +294,7 @@ onMounted(async () => {
       <el-form label-position="top">
         <el-form-item label="配置名称"><el-input v-model="form.name" maxlength="80" /></el-form-item>
         <el-form-item label="模型类型">
-          <el-radio-group v-model="form.modelType" :disabled="Boolean(editing?.active)" @change="applyModelType">
-            <el-radio-button value="CHAT">对话模型</el-radio-button>
-            <el-radio-button value="EMBEDDING">向量模型</el-radio-button>
-          </el-radio-group>
+          <el-tag effect="plain">{{ systemScope ? '向量模型（系统统一）' : '聊天模型（当前账号）' }}</el-tag>
         </el-form-item>
         <el-form-item label="模型供应商">
           <el-select v-model="form.provider" style="width: 100%" @change="applyProvider">

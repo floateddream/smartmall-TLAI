@@ -8,13 +8,17 @@ import java.util.List;
 import java.util.Optional;
 
 public interface AiModelConfigRepository {
-    List<AiModelConfig> findAll();
+    List<AiModelConfig> findSystem();
+
+    List<AiModelConfig> findByOwner(long ownerUserId);
 
     Optional<AiModelConfig> findById(long id);
 
-    Optional<AiModelConfig> findByName(String name);
+    Optional<AiModelConfig> findByName(String name, Long ownerUserId);
 
-    Optional<AiModelConfig> findActive(AiModelType modelType);
+    Optional<AiModelConfig> findActiveSystem(AiModelType modelType);
+
+    Optional<AiModelConfig> findActiveForOwner(AiModelType modelType, long ownerUserId);
 
     AiModelConfig insert(AiModelConfig config);
 
@@ -22,7 +26,7 @@ public interface AiModelConfigRepository {
 
     void lockConfiguration();
 
-    void clearActive(AiModelType modelType, OffsetDateTime changedAt, long operatorId);
+    void clearActive(AiModelType modelType, Long ownerUserId, OffsetDateTime changedAt, long operatorId);
 
     boolean updateActive(long id, boolean active, OffsetDateTime changedAt, long operatorId);
 

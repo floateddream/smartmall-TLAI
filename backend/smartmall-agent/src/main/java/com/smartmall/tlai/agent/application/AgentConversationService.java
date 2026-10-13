@@ -85,7 +85,7 @@ public class AgentConversationService {
                 .toList();
 
         AgentConversationState state = parseState(conversation.stateJson());
-        AiCallContext callContext = new AiCallContext(UUID.randomUUID().toString(), conversationId);
+        AiCallContext callContext = new AiCallContext(user.userId(), UUID.randomUUID().toString(), conversationId);
         AgentChatResult reply = agentService.chat(history, user, state, callContext);
         OffsetDateTime completedAt = OffsetDateTime.now(ZoneOffset.UTC);
         AgentConversationMessage assistantMessage = repository.insertMessage(new AgentConversationMessage(

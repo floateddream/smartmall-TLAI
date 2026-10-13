@@ -42,7 +42,7 @@ public class AiModelConfigController {
 
     @GetMapping
     public ApiResponse<List<AiModelConfigResponse>> list() {
-        return ApiResponse.success(service.list().stream()
+        return ApiResponse.success(service.listSystem().stream()
                 .map(AiModelConfigResponse::from).toList());
     }
 
@@ -58,7 +58,7 @@ public class AiModelConfigController {
         var command = toCommand(request, principal.id());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(AiModelConfigResponse.from(
-                        service.create(command))));
+                        service.createSystem(command))));
     }
 
     @PutMapping("/{id}")
@@ -66,14 +66,14 @@ public class AiModelConfigController {
             @PathVariable @Min(1) long id, @Valid @RequestBody AiModelConfigRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return ApiResponse.success(AiModelConfigResponse.from(
-                service.update(id, toCommand(request, principal.id()))));
+                service.updateSystem(id, toCommand(request, principal.id()))));
     }
 
     @PatchMapping("/{id}/active")
     public ApiResponse<AiModelConfigResponse> activate(
             @PathVariable @Min(1) long id, @AuthenticationPrincipal AppUserPrincipal principal) {
         return ApiResponse.success(AiModelConfigResponse.from(
-                service.activate(id, principal.id())));
+                service.activateSystem(id, principal.id())));
     }
 
     @PatchMapping("/{id}/enabled")
@@ -81,12 +81,12 @@ public class AiModelConfigController {
             @PathVariable @Min(1) long id, @Valid @RequestBody AiModelEnabledRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return ApiResponse.success(AiModelConfigResponse.from(
-                service.changeEnabled(id, request.enabled(), principal.id())));
+                service.changeSystemEnabled(id, request.enabled(), principal.id())));
     }
 
     @PostMapping("/{id}/test")
     public ApiResponse<AiModelTestResponse> test(@PathVariable @Min(1) long id) {
-        return ApiResponse.success(new AiModelTestResponse(true, service.test(id)));
+        return ApiResponse.success(new AiModelTestResponse(true, service.testSystem(id)));
     }
 
     private static AiModelCommand toCommand(AiModelConfigRequest request, long operatorId) {

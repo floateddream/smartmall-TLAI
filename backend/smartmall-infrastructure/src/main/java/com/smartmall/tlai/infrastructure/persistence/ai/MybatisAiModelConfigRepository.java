@@ -23,8 +23,18 @@ public class MybatisAiModelConfigRepository implements AiModelConfigRepository {
     }
 
     @Override
-    public List<AiModelConfig> findAll() {
+    public List<AiModelConfig> findSystem() {
         return mapper.selectList(Wrappers.<AiModelConfigPersistenceEntity>lambdaQuery()
+                        .isNull(AiModelConfigPersistenceEntity::getOwnerUserId)
+                        .orderByDesc(AiModelConfigPersistenceEntity::getActive)
+                        .orderByDesc(AiModelConfigPersistenceEntity::getUpdatedAt))
+                .stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public List<AiModelConfig> findByOwner(long ownerUserId) {
+        return mapper.selectList(Wrappers.<AiModelConfigPersistenceEntity>lambdaQuery()
+                        .eq(AiModelConfigPersistenceEntity::getOwnerUserId, ownerUserId)
                         .orderByDesc(AiModelConfigPersistenceEntity::getActive)
                         .orderByDesc(AiModelConfigPersistenceEntity::getUpdatedAt))
                 .stream().map(this::toDomain).toList();
@@ -36,16 +46,30 @@ public class MybatisAiModelConfigRepository implements AiModelConfigRepository {
     }
 
     @Override
-    public Optional<AiModelConfig> findByName(String name) {
-        return Optional.ofNullable(mapper.selectOne(Wrappers.<AiModelConfigPersistenceEntity>lambdaQuery()
-                        .eq(AiModelConfigPersistenceEntity::getName, name)))
+    public Optional<AiModelConfig> findByName(String name, Long ownerUserId) {
+        var query = Wrappers.<AiModelConfigPersistenceEntity>lambdaQuery()
+                .eq(AiModelConfigPersistenceEntity::getName, name);
+        if (ownerUserId == null) query.isNull(AiModelConfigPersistenceEntity::getOwnerUserId);
+        else query.eq(AiModelConfigPersistenceEntity::getOwnerUserId, ownerUserId);
+        return Optional.ofNullable(mapper.selectOne(query))
                 .map(this::toDomain);
     }
 
     @Override
-    public Optional<AiModelConfig> findActive(AiModelType modelType) {
+    public Optional<AiModelConfig> findActiveSystem(AiModelType modelType) {
         return Optional.ofNullable(mapper.selectOne(Wrappers.<AiModelConfigPersistenceEntity>lambdaQuery()
                         .eq(AiModelConfigPersistenceEntity::getModelType, modelType.name())
+                        .isNull(AiModelConfigPersistenceEntity::getOwnerUserId)
+                        .eq(AiModelConfigPersistenceEntity::getActive, true)
+                        .eq(AiModelConfigPersistenceEntity::getEnabled, true)))
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<AiModelConfig> findActiveForOwner(AiModelType modelType, long ownerUserId) {
+        return Optional.ofNullable(mapper.selectOne(Wrappers.<AiModelConfigPersistenceEntity>lambdaQuery()
+                        .eq(AiModelConfigPersistenceEntity::getModelType, modelType.name())
+                        .eq(AiModelConfigPersistenceEntity::getOwnerUserId, ownerUserId)
                         .eq(AiModelConfigPersistenceEntity::getActive, true)
                         .eq(AiModelConfigPersistenceEntity::getEnabled, true)))
                 .map(this::toDomain);
@@ -79,8 +103,9 @@ public class MybatisAiModelConfigRepository implements AiModelConfigRepository {
     }
 
     @Override
-    public void clearActive(AiModelType modelType, OffsetDateTime changedAt, long operatorId) {
-        mapper.clearActive(modelType, changedAt, operatorId);
+    public void clearActive(AiModelType modelType, Long ownerUserId, OffsetDateTime changedAt, long operatorId) {
+        if (ownerUserId == null) mapper.clearSystemActive(modelType, changedAt, operatorId);
+        else mapper.clearOwnerActive(modelType, ownerUserId, changedAt, operatorId);
     }
 
     @Override
@@ -99,7 +124,8 @@ public class MybatisAiModelConfigRepository implements AiModelConfigRepository {
                 entity.getModelName(), entity.getApiKeyCiphertext(), entity.getTemperature(), entity.getMaxTokens(),
                 entity.getEmbeddingDimensions(),
                 Boolean.TRUE.equals(entity.getActive()), Boolean.TRUE.equals(entity.getEnabled()),
-                entity.getCreatedBy(), entity.getUpdatedBy(), entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.getOwnerUserId(), entity.getCreatedBy(), entity.getUpdatedBy(),
+                entity.getCreatedAt(), entity.getUpdatedAt());
     }
 
     private AiModelConfigPersistenceEntity toEntity(AiModelConfig config) {
@@ -116,6 +142,7 @@ public class MybatisAiModelConfigRepository implements AiModelConfigRepository {
         entity.setEmbeddingDimensions(config.embeddingDimensions());
         entity.setActive(config.active());
         entity.setEnabled(config.enabled());
+        entity.setOwnerUserId(config.ownerUserId());
         entity.setCreatedBy(config.createdBy());
         entity.setUpdatedBy(config.updatedBy());
         entity.setCreatedAt(config.createdAt());

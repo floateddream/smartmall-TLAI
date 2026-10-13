@@ -39,7 +39,7 @@ class AiEmbeddingServiceTest {
     @Test
     void embedsAllInputsWithOneActiveConfiguration() {
         AiModelConfig config = embeddingConfig(3);
-        when(repository.findActive(AiModelType.EMBEDDING)).thenReturn(Optional.of(config));
+        when(repository.findActiveSystem(AiModelType.EMBEDDING)).thenReturn(Optional.of(config));
         when(gateway.embed(config, "第一段", "ollama", Duration.ofSeconds(60)))
                 .thenReturn(new float[]{1, 2, 3});
         when(gateway.embed(config, "第二段", "ollama", Duration.ofSeconds(60)))
@@ -51,7 +51,7 @@ class AiEmbeddingServiceTest {
 
         assertThat(result).hasSize(2);
         assertThat(result.getFirst()).containsExactly(1, 2, 3);
-        verify(repository).findActive(AiModelType.EMBEDDING);
+        verify(repository).findActiveSystem(AiModelType.EMBEDDING);
         verify(callLogService).record(eq(config), eq(AiCallScene.KNOWLEDGE_EMBEDDING),
                 eq(AiCallStatus.SUCCESS), anyLong(), eq(2), eq(6L), eq(2), eq(6L), eq(null));
     }
@@ -59,7 +59,7 @@ class AiEmbeddingServiceTest {
     @Test
     void rejectsUnexpectedVectorDimensions() {
         AiModelConfig config = embeddingConfig(3);
-        when(repository.findActive(AiModelType.EMBEDDING)).thenReturn(Optional.of(config));
+        when(repository.findActiveSystem(AiModelType.EMBEDDING)).thenReturn(Optional.of(config));
         when(gateway.embed(config, "内容", "ollama", Duration.ofSeconds(60)))
                 .thenReturn(new float[]{1, 2});
         var service = new AiEmbeddingService(repository, gateway,
@@ -78,6 +78,6 @@ class AiEmbeddingServiceTest {
         OffsetDateTime now = OffsetDateTime.now();
         return new AiModelConfig(1L, "本地向量模型", AiModelType.EMBEDDING, AiProvider.OLLAMA,
                 "http://127.0.0.1:11434/v1", "bge-m3", null, BigDecimal.ZERO, 2048,
-                dimensions, true, true, 1L, 1L, now, now);
+                dimensions, true, true, null, 1L, 1L, now, now);
     }
 }

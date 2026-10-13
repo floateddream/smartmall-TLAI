@@ -44,7 +44,7 @@ public class AiEmbeddingService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Embedding 输入不能为空");
         }
 
-        AiModelConfig config = repository.findActive(AiModelType.EMBEDDING)
+        AiModelConfig config = repository.findActiveSystem(AiModelType.EMBEDDING)
                 .filter(AiModelConfig::enabled)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AI_MODEL_NOT_CONFIGURED,
                         "尚未启用可用的 Embedding 模型"));
