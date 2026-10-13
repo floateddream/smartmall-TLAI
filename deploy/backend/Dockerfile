@@ -28,5 +28,5 @@ USER smartmall
 EXPOSE 8080
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8"
 HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=5 \
-  CMD wget -q -O - http://127.0.0.1:8080/actuator/health/readiness | grep -q '"status":"UP"' || exit 1
+  CMD wget -q -O - http://127.0.0.1:8080/actuator/health | grep -q '"status":"UP"' || exit 1
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar application.jar"]
