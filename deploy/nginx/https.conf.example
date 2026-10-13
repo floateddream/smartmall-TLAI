@@ -12,6 +12,13 @@ server {
     # 兼容 CentOS 7 旧内核上的 Docker overlay2，避免大静态文件响应被截断。
     sendfile off;
 
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_types text/plain text/css application/json application/javascript application/xml image/svg+xml;
+
     ssl_certificate /etc/nginx/tls/fullchain.pem;
     ssl_certificate_key /etc/nginx/tls/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
