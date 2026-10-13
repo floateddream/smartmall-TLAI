@@ -55,6 +55,10 @@ Flyway 在后端启动时按 V1～V16 顺序迁移。不要修改已经发布的
 - Compose 为每个服务启用 10 MiB × 3 的日志轮转。
 - `docker compose ... logs --since 10m backend` 用于排查；分享日志前先检查敏感信息。
 
+## CentOS 7 构建兼容性
+
+CentOS 7 使用 3.10 内核，较新的 Alpine 基础镜像可能在 pnpm 安装完成后触发 `EPERM: operation not permitted, write`。前端 Dockerfile 因此固定使用 Node 22.12.0 + Alpine 3.20 和 Nginx 1.27.3 + Alpine 3.20，并同时固定镜像摘要。不要仅为了追新版本把它们改回 `node:22-alpine` 或 `nginx:alpine`；升级前应在目标内核上重新完成镜像构建和容器健康检查。长期部署仍建议迁移到受支持的新 Linux 发行版和 4.x 以上内核。
+
 ## HTTPS
 
 推荐在宿主机或云负载均衡器终止 TLS。若直接由容器 Nginx 终止，可基于 `nginx/https.conf.example`：替换 `__PUBLIC_HOST__`，只读挂载证书目录，并在 Compose 中发布 443。证书私钥不得加入镜像或 Git。启用 HTTPS 后同步把 `SMARTMALL_CORS_ALLOWED_ORIGINS` 设置为实际 `https://` Origin。
