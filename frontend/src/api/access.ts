@@ -60,6 +60,10 @@ export interface RoleInput {
   permissionCodes: string[]
 }
 
+export interface RegistrationSetting {
+  enabled: boolean
+}
+
 export const accessApi = {
   listUsers: async (page: number, keyword: string, roleCode: string, enabled: boolean | '') =>
     (await api.get<ApiResponse<PageResult<ManagedUser>>>('/admin/users', {
@@ -83,6 +87,10 @@ export const accessApi = {
     (await api.patch<ApiResponse<AccessRole>>(`/admin/roles/${id}/enabled`, { enabled })).data.data,
   listPermissions: async () =>
     (await api.get<ApiResponse<PermissionDefinition[]>>('/admin/permissions')).data.data,
+  getRegistrationSetting: async () =>
+    (await api.get<ApiResponse<RegistrationSetting>>('/admin/settings/registration')).data.data,
+  changeRegistrationSetting: async (enabled: boolean) =>
+    (await api.put<ApiResponse<RegistrationSetting>>('/admin/settings/registration', { enabled })).data.data,
   listAudits: async (page = 1) =>
     (await api.get<ApiResponse<PageResult<PermissionAudit>>>('/admin/audits', { params: { page, size: 30 } })).data.data,
 }

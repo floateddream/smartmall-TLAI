@@ -57,6 +57,7 @@ public class SecurityConfig {
                         // SSE 完成后会触发容器内部的异步分发，初始请求已完成 JWT 和方法权限校验。
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/registration").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

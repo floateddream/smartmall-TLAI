@@ -1,5 +1,6 @@
 package com.smartmall.tlai.security.auth;
 
+import com.smartmall.tlai.business.access.application.RegistrationPolicyService;
 import com.smartmall.tlai.business.user.application.UserAccountService;
 import com.smartmall.tlai.business.user.domain.BuiltInRoleCodes;
 import com.smartmall.tlai.business.user.domain.UserAccount;
@@ -17,18 +18,22 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthService {
     private final UserAccountService userAccountService;
+    private final RegistrationPolicyService registrationPolicyService;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
 
     public AuthService(UserAccountService userAccountService,
+                       RegistrationPolicyService registrationPolicyService,
                        AuthenticationManager authenticationManager,
                        JwtService jwtService) {
         this.userAccountService = userAccountService;
+        this.registrationPolicyService = registrationPolicyService;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
     }
 
     public AuthenticatedUser register(RegisterCommand command) {
+        registrationPolicyService.requireRegistrationEnabled();
         UserAccount user = userAccountService.createUser(command.username(), command.email(),
                 command.password(), BuiltInRoleCodes.OPERATOR);
         return AuthenticatedUser.from(user);

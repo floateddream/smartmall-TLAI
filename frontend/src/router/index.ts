@@ -5,10 +5,9 @@ import { decideRouteAccess } from '@/utils/routePolicy'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    // 对外统一使用固定登录入口，避免根地址或历史地址长期停留在非标准 URL。
-    { path: '/', redirect: '/web/toLogin' },
+    // 根地址和未知地址不泄露登录入口，只有完整地址才进入登录页。
+    { path: '/', name: 'entry-not-found', component: () => import('@/views/NotFoundView.vue'), meta: { public: true } },
     { path: '/web/toLogin', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { guest: true } },
-    { path: '/login', redirect: to => ({ name: 'login', query: to.query, hash: to.hash }) },
     { path: '/register', name: 'register', component: () => import('@/views/RegisterView.vue'), meta: { guest: true } },
     {
       path: '/',
@@ -29,7 +28,7 @@ const router = createRouter({
         { path: 'ai-call-logs', name: 'ai-call-logs', component: () => import('@/views/AiCallLogView.vue'), meta: { title: '调用日志', section: '系统设置', permission: 'ai:call_log_view' } },
       ],
     },
-    { path: '/:pathMatch(.*)*', redirect: '/web/toLogin' },
+    { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { public: true } },
   ],
 })
 

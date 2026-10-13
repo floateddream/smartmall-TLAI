@@ -4,6 +4,7 @@ import com.smartmall.tlai.business.access.application.AccessControlService;
 import com.smartmall.tlai.business.access.application.ChangeRoleEnabledCommand;
 import com.smartmall.tlai.business.access.application.ChangeRolePermissionsCommand;
 import com.smartmall.tlai.business.access.application.RoleCommand;
+import com.smartmall.tlai.business.access.application.RegistrationPolicyService;
 import com.smartmall.tlai.business.access.application.UpdateRoleCommand;
 import com.smartmall.tlai.business.user.application.ChangeUserEnabledCommand;
 import com.smartmall.tlai.business.user.application.ChangeUserRolesCommand;
@@ -21,6 +22,7 @@ import com.smartmall.tlai.web.access.dto.PermissionAuditResponse;
 import com.smartmall.tlai.web.access.dto.PermissionResponse;
 import com.smartmall.tlai.web.access.dto.RoleRequest;
 import com.smartmall.tlai.web.access.dto.RoleResponse;
+import com.smartmall.tlai.web.access.dto.RegistrationSettingResponse;
 import com.smartmall.tlai.web.access.dto.UpdateRoleRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -48,10 +50,13 @@ import java.util.List;
 public class AccessControlController {
     private final UserAccountService userService;
     private final AccessControlService accessService;
+    private final RegistrationPolicyService registrationPolicyService;
 
-    public AccessControlController(UserAccountService userService, AccessControlService accessService) {
+    public AccessControlController(UserAccountService userService, AccessControlService accessService,
+                                   RegistrationPolicyService registrationPolicyService) {
         this.userService = userService;
         this.accessService = accessService;
+        this.registrationPolicyService = registrationPolicyService;
     }
 
     @GetMapping("/users")
@@ -146,6 +151,23 @@ public class AccessControlController {
     public ApiResponse<List<PermissionResponse>> listPermissions() {
         return ApiResponse.success(accessService.listPermissions().stream()
                 .map(PermissionResponse::from).toList());
+    }
+
+    @GetMapping("/settings/registration")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<RegistrationSettingResponse> registrationSetting() {
+        return ApiResponse.success(new RegistrationSettingResponse(
+                registrationPolicyService.isRegistrationEnabled()));
+    }
+
+    @PutMapping("/settings/registration")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<RegistrationSettingResponse> changeRegistrationSetting(
+            @Valid @RequestBody ChangeEnabledRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        boolean enabled = registrationPolicyService.changeRegistrationEnabled(
+                request.enabled(), principal.id());
+        return ApiResponse.success(new RegistrationSettingResponse(enabled));
     }
 
     @GetMapping("/audits")

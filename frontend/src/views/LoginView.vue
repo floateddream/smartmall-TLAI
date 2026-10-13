@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-vue-next'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/client'
+import { authApi } from '@/api/auth'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 
 const router = useRouter()
@@ -16,6 +17,8 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const showPassword = ref(false)
 const errorMessage = ref('')
+const registrationChecked = ref(false)
+const registrationEnabled = ref(false)
 const rules: FormRules = {
   account: [{ required: true, message: '请输入用户名或邮箱', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
@@ -37,6 +40,17 @@ async function submit() {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  try {
+    registrationEnabled.value = (await authApi.getRegistrationStatus()).enabled
+  } catch {
+    // 状态无法确认时隐藏入口，避免给用户一个注定失败的注册流程。
+    registrationEnabled.value = false
+  } finally {
+    registrationChecked.value = true
+  }
+})
 </script>
 
 <template>
@@ -68,7 +82,8 @@ async function submit() {
           <span>{{ loading ? '正在登录...' : '进入工作台' }}</span><ArrowRight :size="18" />
         </button>
       </el-form>
-      <div class="auth-panel__switch">还没有账号？ <router-link to="/register">创建账号 <ArrowRight :size="14" /></router-link></div>
+      <div v-if="registrationEnabled" class="auth-panel__switch">还没有账号？ <router-link to="/register">创建账号 <ArrowRight :size="14" /></router-link></div>
+      <div v-else-if="registrationChecked" class="auth-panel__switch auth-panel__switch--closed">新用户注册当前未开放</div>
     </section>
   </AuthLayout>
 </template>

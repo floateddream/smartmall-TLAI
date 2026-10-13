@@ -49,6 +49,22 @@ sh deploy/scripts/update-frontend.sh --skip-pull
 
 该脚本只更新前端，不重建后端，也不会修改 `deploy/.env` 或基础设施容器。
 
+### 服务器整套应用一键更新
+
+后端代码、数据库迁移或前后端同时变更时，在项目根目录执行：
+
+```bash
+sh deploy/scripts/update-app.sh
+```
+
+脚本会依次拉取代码、检查 Compose 配置、构建后端与前端镜像、替换两个应用容器并等待健康检查通过。它只操作 `backend` 和 `frontend`，不会重启 PostgreSQL、Redis、MinIO 或 Ollama，也不会修改 `deploy/.env`。如果已经手动拉取过代码，可执行：
+
+```bash
+sh deploy/scripts/update-app.sh --skip-pull
+```
+
+含数据库迁移的版本应先自行完成数据库备份。新后端首次启动时会由 Flyway 自动执行尚未应用的迁移；迁移失败时后端健康检查不会通过，脚本会打印最近的后端日志并退出。
+
 ## 首次部署
 
 1. 安装 Docker Engine 与 Compose v2，准备至少 4 GiB 内存和持久磁盘。
@@ -62,7 +78,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 docker compose --env-file deploy/.env -f deploy/compose.yaml ps
 ```
 
-Flyway 在后端启动时按 V1～V16 顺序迁移。不要修改已经发布的迁移，也不要在未确认数据库状态时执行 `repair`。
+Flyway 在后端启动时按 V1～V17 顺序迁移。不要修改已经发布的迁移，也不要在未确认数据库状态时执行 `repair`。
 
 ## 健康与日志
 

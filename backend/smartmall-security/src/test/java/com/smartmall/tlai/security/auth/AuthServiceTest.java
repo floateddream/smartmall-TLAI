@@ -1,5 +1,6 @@
 package com.smartmall.tlai.security.auth;
 
+import com.smartmall.tlai.business.access.application.RegistrationPolicyService;
 import com.smartmall.tlai.business.user.application.UserAccountService;
 import com.smartmall.tlai.business.user.domain.BuiltInRoleCodes;
 import com.smartmall.tlai.business.user.domain.UserAccount;
@@ -25,18 +26,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
     @Mock UserAccountService userAccountService;
+    @Mock RegistrationPolicyService registrationPolicyService;
     @Mock AuthenticationManager authenticationManager;
     @Mock JwtService jwtService;
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userAccountService, authenticationManager, jwtService);
+        authService = new AuthService(userAccountService, registrationPolicyService,
+                authenticationManager, jwtService);
     }
 
     @Test
@@ -50,7 +54,20 @@ class AuthServiceTest {
 
         assertThat(result.email()).isEqualTo("test@example.com");
         assertThat(result.roles()).containsExactly(BuiltInRoleCodes.OPERATOR);
+        verify(registrationPolicyService).requireRegistrationEnabled();
         verify(userAccountService).createUser(command.username(), command.email(), command.password(), BuiltInRoleCodes.OPERATOR);
+    }
+
+    @Test
+    void shouldRejectRegistrationWhenPublicRegistrationIsClosed() {
+        RegisterCommand command = new RegisterCommand("test_user", "test@example.com", "password1");
+        doThrow(new BusinessException(ErrorCode.REGISTRATION_CLOSED))
+                .when(registrationPolicyService).requireRegistrationEnabled();
+
+        assertThatThrownBy(() -> authService.register(command))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.REGISTRATION_CLOSED));
+        verifyNoInteractions(userAccountService);
     }
 
     @Test

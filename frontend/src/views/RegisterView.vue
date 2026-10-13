@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, LockKeyhole, Mail, UserRound } from 'lucide-vue-next'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/client'
+import { authApi } from '@/api/auth'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 
 const router = useRouter()
@@ -15,6 +16,7 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const showPassword = ref(false)
 const errorMessage = ref('')
+const registrationReady = ref(false)
 const rules: FormRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
@@ -49,11 +51,26 @@ async function submit() {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  try {
+    const status = await authApi.getRegistrationStatus()
+    if (!status.enabled) {
+      ElMessage.warning('系统当前已关闭新用户注册')
+      await router.replace({ name: 'login' })
+      return
+    }
+    registrationReady.value = true
+  } catch {
+    ElMessage.error('暂时无法确认注册状态，请稍后重试')
+    await router.replace({ name: 'login' })
+  }
+})
 </script>
 
 <template>
   <AuthLayout>
-    <section class="auth-panel auth-panel--register" aria-labelledby="register-heading">
+    <section v-if="registrationReady" class="auth-panel auth-panel--register" aria-labelledby="register-heading">
       <div class="auth-panel__topline"><span>NEW ACCOUNT</span><span>02 — 02</span></div>
       <div class="auth-panel__heading">
         <router-link class="back-link" :to="{ name: 'login' }"><ArrowLeft :size="15" /> 返回登录</router-link>
@@ -95,5 +112,6 @@ async function submit() {
       </el-form>
       <div class="auth-panel__switch">已有账号？ <router-link :to="{ name: 'login' }">直接登录 <ArrowRight :size="14" /></router-link></div>
     </section>
+    <section v-else class="auth-panel auth-panel--register auth-panel--checking" aria-live="polite">正在确认注册状态...</section>
   </AuthLayout>
 </template>

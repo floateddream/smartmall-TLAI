@@ -24,7 +24,8 @@ server {
     add_header Referrer-Policy strict-origin-when-cross-origin always;
 
     location = /healthz { access_log off; default_type text/plain; return 200 "ok\n"; }
-    location = / { return 302 /web/toLogin; }
+    location = / { error_page 404 =404 /entry-not-found.html; return 404; }
+    location = /entry-not-found.html { internal; }
     location /api/ {
         proxy_pass http://backend:8080;
         proxy_http_version 1.1;

@@ -29,6 +29,9 @@ const auditError = ref('')
 const saving = ref(false)
 const actingUserId = ref<number | null>(null)
 const actingRoleId = ref<number | null>(null)
+const registrationEnabled = ref(false)
+const registrationSettingLoading = ref(false)
+const registrationSettingError = ref('')
 const userDialog = ref(false)
 const roleDialog = ref(false)
 const auditDrawer = ref(false)
@@ -43,6 +46,7 @@ let auditRequestId = 0
 
 const canManageUsers = computed(() => auth.can('system:user_manage'))
 const canManageRoles = computed(() => auth.can('system:rbac_manage'))
+const isSystemAdmin = computed(() => Boolean(auth.user?.roles.includes('ADMIN')))
 const permissionGroups = computed(() => {
   const grouped = new Map<string, PermissionDefinition[]>()
   for (const permission of permissions.value) {
@@ -224,6 +228,43 @@ async function toggleRole(role: AccessRole) {
   }
 }
 
+async function loadRegistrationSetting() {
+  if (!isSystemAdmin.value) return
+  registrationSettingLoading.value = true
+  registrationSettingError.value = ''
+  try {
+    registrationEnabled.value = (await accessApi.getRegistrationSetting()).enabled
+  } catch (error) {
+    registrationSettingError.value = errorMessage(error, '注册设置加载失败')
+  } finally {
+    registrationSettingLoading.value = false
+  }
+}
+
+async function toggleRegistrationSetting() {
+  if (registrationSettingLoading.value) return
+  const enabled = !registrationEnabled.value
+  const action = enabled ? '开启' : '关闭'
+  try {
+    await ElMessageBox.confirm(
+      enabled ? '开启后，访客可以通过注册页创建运营账号。' : '关闭后，注册入口将隐藏，注册接口也会拒绝创建账号。',
+      `确认${action}用户注册？`,
+      { type: enabled ? 'info' : 'warning', confirmButtonText: `确认${action}`, cancelButtonText: '取消' },
+    )
+    registrationSettingLoading.value = true
+    registrationSettingError.value = ''
+    registrationEnabled.value = (await accessApi.changeRegistrationSetting(enabled)).enabled
+    ElMessage.success(`用户注册已${action}`)
+  } catch (error) {
+    if (error !== 'cancel') {
+      registrationSettingError.value = errorMessage(error, `${action}注册失败`)
+      ElMessage.error(registrationSettingError.value)
+    }
+  } finally {
+    registrationSettingLoading.value = false
+  }
+}
+
 async function openAudits() {
   auditDrawer.value = true
   await loadAuditPage(1)
@@ -260,7 +301,7 @@ const actionLabels: Record<string, string> = {
 }
 
 onMounted(async () => {
-  await loadRoles()
+  await Promise.all([loadRoles(), loadRegistrationSetting()])
   await loadUsers(1)
 })
 </script>
@@ -320,6 +361,10 @@ onMounted(async () => {
             <header><span class="role-card__icon"><ShieldCheck :size="19" /></span><div><h3>{{ role.name }}</h3><code>{{ role.code }}</code></div><span v-if="role.builtIn" class="demo-badge demo-badge--muted">内置</span></header>
             <p>{{ role.description || '暂无角色说明' }}</p>
             <div class="role-card__stats"><span><strong>{{ role.permissions.length }}</strong> 项权限</span><span :class="role.enabled ? 'text-green' : 'text-muted'">{{ role.enabled ? '启用中' : '已停用' }}</span></div>
+            <div v-if="role.code === 'ADMIN' && isSystemAdmin" class="role-card__registration">
+              <div><strong>开放用户注册</strong><small>{{ registrationSettingError || (registrationEnabled ? '访客可以创建运营账号' : '仅管理员可以创建后台用户') }}</small></div>
+              <el-switch :model-value="registrationEnabled" aria-label="开放用户注册" :loading="registrationSettingLoading" :disabled="registrationSettingLoading" :before-change="() => { void toggleRegistrationSetting(); return false }" />
+            </div>
             <footer><button type="button" class="outline-button" :disabled="actingRoleId !== null" @click="openEditRole(role)"><Edit3 :size="15" />编辑配置</button><el-switch :model-value="role.enabled" :aria-label="`${role.enabled ? '停用' : '启用'}角色 ${role.name}`" :disabled="role.code === 'ADMIN' || actingRoleId !== null" :loading="actingRoleId === role.id" :before-change="() => { void toggleRole(role); return false }" /></footer>
           </article>
           <div v-if="loadingRoles" class="catalog-feedback" role="status">正在加载角色...</div>

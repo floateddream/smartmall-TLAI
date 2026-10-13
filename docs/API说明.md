@@ -1,11 +1,13 @@
 # API 说明
 
-所有接口前缀为 `/api`，返回统一结构 `{ "success": true, "data": ... }`；失败返回稳定错误码和面向用户的消息。除注册、登录外均需 `Authorization: Bearer <token>`。下表列出主要入口，实际 DTO 约束以代码为准。
+所有接口前缀为 `/api`，成功时返回统一结构 `{ "code": "SUCCESS", "message": "操作成功", "data": ... }`；失败返回稳定错误码和面向用户的消息。除表中注明“公开”的接口外，均需 `Authorization: Bearer <token>`。下表列出主要入口，实际 DTO 约束以代码为准。
 
 | 模块 | 方法与路径 | 主要权限 | 说明 |
 |---|---|---|---|
-| 认证 | `POST /auth/register`、`POST /auth/login` | 公开 | 注册普通运营账号、登录 |
+| 认证 | `GET /auth/registration` | 公开 | 查询当前是否开放新用户注册 |
+| 认证 | `POST /auth/register`、`POST /auth/login` | 公开 | 注册普通运营账号、登录；注册关闭时返回 `REGISTRATION_CLOSED` |
 | 认证 | `GET /auth/me` | 已认证 | 当前用户、角色和权限 |
+| 系统设置 | `GET/PUT /admin/settings/registration` | `ADMIN` 角色 | 查询或修改公开注册开关 |
 | 商品 | `GET/POST/PUT /products...` | `product:view/manage` | 商品查询与维护 |
 | 客户 | `GET/POST/PUT /customers...` | `customer:view/manage` | 客户查询与维护 |
 | 订单 | `GET/POST /orders...` | `order:*` | 创建、支付、取消、查询 |
@@ -50,4 +52,4 @@ Agent 响应可能是 `ANSWER`、`TOOL_RESULT`、`ACTION_CONFIRMATION`、`CLARIF
 
 ## 分页和错误
 
-分页通常使用 `page`（从 1 开始）与 `size`（最大 100）。常见错误包括 `BAD_REQUEST`、`INVALID_CREDENTIALS`、`FORBIDDEN`、资源不存在、状态冲突、Agent 确认过期或进行中。客户端不得根据中文消息分支，应使用错误码。
+分页通常使用 `page`（从 1 开始）与 `size`（最大 100）。常见错误包括 `BAD_REQUEST`、`INVALID_CREDENTIALS`、`REGISTRATION_CLOSED`、`FORBIDDEN`、资源不存在、状态冲突、Agent 确认过期或进行中。客户端不得根据中文消息分支，应使用错误码。

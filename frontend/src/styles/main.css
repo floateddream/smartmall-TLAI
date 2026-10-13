@@ -105,11 +105,20 @@ a { color: inherit; text-decoration: none; }
 .auth-panel__switch { border-top: 1px solid #2b3847; margin-top: 28px; padding-top: 22px; text-align: center; color: var(--muted); font-size: 12px; }
 .auth-panel__switch a { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; color: var(--teal); font-weight: 700; }
 .auth-panel__switch a:hover { color: #79eedb; }
+.auth-panel__switch--closed { color: #718493; }
 .auth-panel--register .auth-panel__heading { margin: 17px 0 19px; }
 .auth-panel--register .el-form-item { margin-bottom: 14px; }
 .auth-panel__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .back-link { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 12px; color: var(--muted); font-size: 12px; }
 .back-link:hover { color: var(--teal); }
+.auth-panel--checking { min-height: 170px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+
+/* 非标准入口只显示独立错误状态，不提供自动跳转或登录地址提示。 */
+.entry-denied { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px; color: var(--text); background: var(--bg); text-align: center; }
+.entry-denied > svg { margin-bottom: 18px; color: var(--teal); filter: drop-shadow(0 0 14px rgba(45,212,191,.22)); }
+.entry-denied .eyebrow { justify-content: center; font-family: Consolas, monospace; }
+.entry-denied h1 { margin: 16px 0 10px; font-size: 30px; }
+.entry-denied > span { color: var(--muted); font-size: 13px; }
 
 /* 后台导航和工具条 */
 .console { min-height: 100vh; --sidebar-width: 246px; background: #0d1119; }
@@ -508,6 +517,12 @@ a { color: inherit; text-decoration: none; }
 .role-card > p { min-height: 42px; margin: 17px 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
 .role-card__stats { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 10px; }
 .role-card__stats strong { color: var(--text); font: 600 17px Consolas, monospace; }
+.role-card__registration { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-top: 1px solid rgba(45,212,191,.2); }
+.role-card__registration > div { min-width: 0; }
+.role-card__registration strong, .role-card__registration small { display: block; }
+.role-card__registration strong { color: #bde8e2; font-size: 11px; }
+.role-card__registration small { margin-top: 5px; overflow-wrap: anywhere; color: #718b96; font-size: 9px; line-height: 1.5; }
+.role-card__registration .el-switch { --el-switch-on-color: #10b981; --el-switch-off-color: #3a4652; flex: 0 0 auto; }
 .role-card footer { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .role-card footer .outline-button { min-height: 34px; }
 .role-card .el-switch { --el-switch-on-color: #8b5cf6; --el-switch-off-color: #3a4652; }

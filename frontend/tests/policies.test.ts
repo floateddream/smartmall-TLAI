@@ -6,18 +6,16 @@ import { decideRouteAccess } from '../src/utils/routePolicy.js'
 import { LatestRequestGate, requestErrorMessage } from '../src/utils/requestState.js'
 
 test('route policy separates guests, unauthenticated users, and missing permissions', () => {
+  assert.equal(decideRouteAccess({ public: true }, '/', false, () => false), true)
+  assert.equal(decideRouteAccess({ public: true }, '/', true, () => false), true)
   assert.deepEqual(decideRouteAccess({ guest: true }, '/web/toLogin', true, () => false), { name: 'dashboard' })
   assert.equal(decideRouteAccess({ guest: true }, '/web/toLogin', false, () => false), true)
-  assert.deepEqual(decideRouteAccess({}, '/orders?page=2', false, () => false), {
-    name: 'login', query: { redirect: '/orders?page=2' },
-  })
+  assert.deepEqual(decideRouteAccess({}, '/orders?page=2', false, () => false), { name: 'entry-not-found' })
   assert.deepEqual(decideRouteAccess({ permission: 'order:view' }, '/orders', true, () => false), {
     name: 'dashboard',
   })
   assert.equal(decideRouteAccess({ permission: 'order:view' }, '/orders', true, () => true), true)
-  assert.deepEqual(decideRouteAccess({}, '//evil.example', false, () => false), {
-    name: 'login', query: { redirect: '/dashboard' },
-  })
+  assert.deepEqual(decideRouteAccess({}, '//evil.example', false, () => false), { name: 'entry-not-found' })
 })
 
 test('agent navigation keeps only the allowlisted route parameters', () => {
