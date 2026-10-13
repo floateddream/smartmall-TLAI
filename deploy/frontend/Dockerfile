@@ -2,7 +2,8 @@
 # 固定版本和摘要，保证演示服务器与其他部署环境使用同一构建基线。
 FROM node:22.12.0-alpine3.20@sha256:027911463b296bdaf6df82b5ccf2c6b290fee725d5fba6513a037ed019400625 AS build
 WORKDIR /app
-RUN corepack enable
+# 旧 Node 镜像内置的 Corepack 不包含 pnpm 当前签名密钥，直接安装项目固定版本。
+RUN npm install --global pnpm@10.34.5
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc ./
 RUN pnpm install --frozen-lockfile
 COPY frontend/ ./

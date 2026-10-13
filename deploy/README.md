@@ -57,7 +57,7 @@ Flyway 在后端启动时按 V1～V16 顺序迁移。不要修改已经发布的
 
 ## CentOS 7 构建兼容性
 
-CentOS 7 使用 3.10 内核，较新的 Alpine 基础镜像可能在 pnpm 安装完成后触发 `EPERM: operation not permitted, write`。前端 Dockerfile 因此固定使用 Node 22.12.0 + Alpine 3.20 和 Nginx 1.27.3 + Alpine 3.20，并同时固定镜像摘要。不要仅为了追新版本把它们改回 `node:22-alpine` 或 `nginx:alpine`；升级前应在目标内核上重新完成镜像构建和容器健康检查。长期部署仍建议迁移到受支持的新 Linux 发行版和 4.x 以上内核。
+CentOS 7 使用 3.10 内核，较新的 Alpine 基础镜像可能在 pnpm 安装完成后触发 `EPERM: operation not permitted, write`。前端 Dockerfile 因此固定使用 Node 22.12.0 + Alpine 3.20 和 Nginx 1.27.3 + Alpine 3.20，并同时固定镜像摘要。旧 Node 镜像内置的 Corepack 不包含当前 pnpm 签名密钥，构建阶段通过 npm 安装项目固定的 `pnpm@10.34.5`，不要通过关闭签名校验规避错误。不要仅为了追新版本把基础镜像改回 `node:22-alpine` 或 `nginx:alpine`；升级前应在目标内核上重新完成镜像构建和容器健康检查。长期部署仍建议迁移到受支持的新 Linux 发行版和 4.x 以上内核。
 
 ## HTTPS
 
